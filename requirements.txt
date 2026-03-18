@@ -1,0 +1,11 @@
+google-generativeai
+requests
+Pillow
+moviepy==1.0.3
+numpy
+google-auth
+google-auth-oauthlib
+google-api-python-client
+imageio
+imageio-ffmpeg
+cloudinary
