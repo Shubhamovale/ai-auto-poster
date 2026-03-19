@@ -1,10 +1,10 @@
 import os
 import json
 import random
-import requests
+from google import genai
 
 def generate_post_content():
-    api_key = os.environ["GEMINI_API_KEY"]
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
     with open("topics.json") as f:
         topics = json.load(f)["topics"]
@@ -22,13 +22,11 @@ Return ONLY JSON no extra text:
     "youtube_tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
 }}"""
 
-    response = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
-        json={{"contents": [{{"parts": [{{"text": prompt}}]}}]}}
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt
     )
 
-    result = response.json()
-    print(f"Gemini status: {response.status_code}")
-    text = result["candidates"][0]["content"]["parts"][0]["text"]
+    text = response.text.strip()
     text = text.replace("```json", "").replace("```", "").strip()
     return json.loads(text)
