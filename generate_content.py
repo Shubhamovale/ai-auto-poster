@@ -1,11 +1,10 @@
-import google.generativeai as genai
+from google import genai
 import os
 import json
 import random
 
 def generate_post_content():
-    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
     with open("topics.json") as f:
         topics = json.load(f)["topics"]
@@ -25,7 +24,7 @@ def generate_post_content():
             "Point 4 - short, punchy (max 8 words)",
             "Point 5 - short, punchy (max 8 words)"
         ],
-        "caption": "Full Instagram/Facebook caption with emojis and hashtags (max 300 words)",
+        "caption": "Full Facebook caption with emojis and hashtags (max 300 words)",
         "image_keyword": "single keyword for background image",
         "youtube_title": "YouTube Shorts title (max 60 chars)",
         "youtube_description": "YouTube description with hashtags",
@@ -33,7 +32,11 @@ def generate_post_content():
     }}
     """
 
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt
+    )
+
     text = response.text.strip()
     text = text.replace("```json", "").replace("```", "").strip()
     return json.loads(text)
