@@ -5,7 +5,7 @@ import requests
 
 def generate_post_content():
     api_key = os.environ["GEMINI_API_KEY"]
-    
+
     with open("topics.json") as f:
         topics = json.load(f)["topics"]
     topic = random.choice(topics)
@@ -22,17 +22,13 @@ Return ONLY JSON no extra text:
     "youtube_tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
 }}"""
 
-    # Using REST API directly - no package needed!
     response = requests.post(
         f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
-        json={"contents": [{"parts": [{"text": prompt}]}]}
+        json={{"contents": [{{"parts": [{{"text": prompt}}]}}]}}
     )
-    
+
     result = response.json()
-    print(f"Gemini response status: {response.status_code}")
-    
+    print(f"Gemini status: {response.status_code}")
     text = result["candidates"][0]["content"]["parts"][0]["text"]
     text = text.replace("```json", "").replace("```", "").strip()
     return json.loads(text)
-
-cloudinary
