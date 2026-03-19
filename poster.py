@@ -9,27 +9,32 @@ def main():
 
     print("📝 Generating content with Gemini...")
     content = generate_post_content()
-    print(f"✅ Topic: {content['title']}")
+    print(f"✅ Content generated!")
+    print(f"   Title: {content['title']}")
+    print(f"   Caption preview: {content['caption'][:100]}")
 
-    print("🎬 Creating Reel video...")
+    print("🎬 Creating video...")
     video_path = create_reel_video(
         content["title"],
         content["points"],
         content["image_keyword"]
     )
+    print(f"✅ Video created at: {video_path}")
 
-    print("📤 Posting to all platforms...")
-    post_to_facebook(content["caption"], video_path)
-    post_to_youtube(
+    print("📤 Posting to Facebook...")
+    fb_result = post_to_facebook(content["caption"], video_path)
+    print(f"Facebook result: {fb_result}")
+
+    print("📤 Posting to YouTube...")
+    yt_result = post_to_youtube(
         content["youtube_title"],
         content["youtube_description"],
         content["youtube_tags"],
         video_path
     )
+    print(f"YouTube result: {yt_result}")
 
-    print("🎉 Done!")
-    print("   ✅ Facebook Reel posted")
-    print("   ✅ YouTube Short posted")
+    print("🎉 All done!")
 
 if __name__ == "__main__":
     try:
@@ -37,3 +42,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Error: {e}")
         traceback.print_exc()
+        raise
