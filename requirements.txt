@@ -1,3 +1,4 @@
+google-genai
 requests
 Pillow
 moviepy==1.0.3
