@@ -9,17 +9,38 @@ import numpy as np
 from io import BytesIO
 
 def fetch_background_image(keyword):
-    url = (
-        f"https://api.unsplash.com/photos/random"
-        f"?query={keyword}&orientation=portrait"
-        f"&client_id={os.environ['UNSPLASH_ACCESS_KEY']}"
-    )
-    resp = requests.get(url).json()
-    img_url = resp["urls"]["regular"]
-    img_data = requests.get(img_url).content
-    img = Image.open(BytesIO(img_data)).convert("RGB")
-    img = img.resize((1080, 1920))
-    return img
+    try:
+        url = (
+            f"https://api.unsplash.com/photos/random"
+            f"?query={keyword}&orientation=portrait"
+            f"&client_id={os.environ['UNSPLASH_ACCESS_KEY']}"
+        )
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        print(f"Unsplash response keys: {list(data.keys())}")
+        
+        # Handle both single photo and error response
+        if "urls" in data:
+            img_url = data["urls"]["regular"]
+        elif "errors" in data:
+            print(f"Unsplash error: {data['errors']}")
+            # Fallback to a default image color
+            img = Image.new("RGB", (1080, 1920), color=(30, 30, 50))
+            return img
+        else:
+            print(f"Unexpected response: {data}")
+            img = Image.new("RGB", (1080, 1920), color=(30, 30, 50))
+            return img
+            
+        img_data = requests.get(img_url, timeout=10).content
+        img = Image.open(BytesIO(img_data)).convert("RGB")
+        img = img.resize((1080, 1920))
+        return img
+        
+    except Exception as e:
+        print(f"Image fetch failed: {e}, using fallback")
+        img = Image.new("RGB", (1080, 1920), color=(30, 30, 50))
+        return img
 
 def create_text_frame(background_img, text, subtitle="",
                        text_color="white", font_size=70):
