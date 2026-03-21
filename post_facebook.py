@@ -5,20 +5,33 @@ def post_to_facebook(caption, video_path):
     page_id    = os.environ["FB_PAGE_ID"]
     page_token = os.environ["FB_PAGE_ACCESS_TOKEN"]
 
-    print("📤 Uploading video to Facebook...")
-    with open(video_path, "rb") as video_file:
+    print("📤 Posting to Facebook as photo post...")
+    
+    # Use thumbnail instead of video for now
+    thumb_path = video_path.replace(".mp4", "_thumb.jpg")
+    
+    # Extract first frame as thumbnail
+    import subprocess
+    subprocess.run([
+        "ffmpeg", "-i", video_path,
+        "-ss", "00:00:01",
+        "-vframes", "1",
+        thumb_path
+    ])
+
+    with open(thumb_path, "rb") as img_file:
         response = requests.post(
-            f"https://graph.facebook.com/{page_id}/videos",
+            f"https://graph.facebook.com/{page_id}/photos",
             data={
-                "description":  caption,
+                "caption": caption,
                 "access_token": page_token
             },
-            files={"source": video_file}
+            files={"source": img_file}
         )
 
     result = response.json()
     if "id" in result:
-        print(f"✅ Facebook Reel posted! ID: {result['id']}")
+        print(f"✅ Facebook photo posted! ID: {result['id']}")
     else:
         print(f"❌ Facebook error: {result}")
     return result
