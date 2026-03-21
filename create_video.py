@@ -99,19 +99,7 @@ def create_text_frame(background_img, text, subtitle="",
     return np.array(img)
 
 def download_free_music():
-    try:
-        music_url = (
-            "https://cdn.pixabay.com/download/audio/2022/01/18/"
-            "audio_d0c6ff1bab.mp3"
-        )
-        resp = requests.get(music_url, timeout=30)
-        music_path = "/tmp/background_music.mp3"
-        with open(music_path, "wb") as f:
-            f.write(resp.content)
-        return music_path
-    except:
-        print("⚠️ Music download failed, continuing without music")
-        return None
+    return None  # Skip music for now
 
 def create_reel_video(title, points, image_keyword):
     print("🖼️  Fetching background image...")
