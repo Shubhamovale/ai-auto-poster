@@ -1,6 +1,7 @@
 import requests
 import os
 import textwrap
+import json
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.editor import ImageClip, concatenate_videoclips, AudioFileClip
 from moviepy.video.fx.fadein import fadein
@@ -101,7 +102,55 @@ def create_text_frame(background_img, text, subtitle="",
 def download_free_music():
     return None  # Skip music for now
 
-def create_reel_video(title, points, image_keyword):
+def build_video_prompt(title, points, image_keyword, video_prompt=None):
+    if video_prompt and video_prompt.strip():
+        return video_prompt.strip()
+
+    points_text = ", ".join(points[:5])
+    return (
+        f"Create a cinematic vertical 9:16 short video about '{title}'. "
+        f"Use {image_keyword} inspired environments and visuals. "
+        f"Show scenes that communicate these beats: {points_text}. "
+        f"Fast pacing, strong visual hook, dramatic lighting, smooth camera motion, "
+        f"modern AI-tech mood, realistic detail, no text overlays, no watermarks."
+    )
+
+
+def save_video_assets(output_dir, title, points, image_keyword, video_prompt):
+    os.makedirs(output_dir, exist_ok=True)
+
+    prompt_path = os.path.join(output_dir, "reel_video_prompt.txt")
+    with open(prompt_path, "w", encoding="utf-8") as f:
+        f.write(video_prompt + "\n")
+
+    metadata_path = os.path.join(output_dir, "reel_video_metadata.json")
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "title": title,
+                "points": points,
+                "image_keyword": image_keyword,
+                "video_prompt": video_prompt,
+            },
+            f,
+            indent=2,
+        )
+
+    return prompt_path, metadata_path
+
+
+def create_reel_video(title, points, image_keyword, video_prompt=None):
+    output_dir = os.path.join(os.getcwd(), "output")
+    video_prompt = build_video_prompt(title, points, image_keyword, video_prompt)
+    prompt_path, metadata_path = save_video_assets(
+        output_dir, title, points, image_keyword, video_prompt
+    )
+
+    print("🎥 AI video prompt ready:")
+    print(video_prompt)
+    print(f"📝 Saved prompt: {prompt_path}")
+    print(f"🗂️ Saved metadata: {metadata_path}")
+
     print("🖼️  Fetching background image...")
     bg_img = fetch_background_image(image_keyword)
 
@@ -146,15 +195,15 @@ def create_reel_video(title, points, image_keyword):
         final_video = final_video.set_audio(audio)
 
     # Export
-    output_path = "/tmp/reel_video.mp4"
+    output_path = os.path.join(output_dir, "reel_video.mp4")
     final_video.write_videofile(
         output_path,
         fps=30,
         codec="libx264",
         audio_codec="aac",
-        temp_audiofile="/tmp/temp_audio.m4a",
+        temp_audiofile=os.path.join(output_dir, "temp_audio.m4a"),
         remove_temp=True,
         logger=None
     )
     print(f"✅ Video created: {output_path}")
-    return output_path
+    return output_path, prompt_path, metadata_path
