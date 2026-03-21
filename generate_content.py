@@ -23,7 +23,7 @@ Return ONLY JSON no extra text:
 }}"""
 
     response = client.models.generate_content(
-        model="models/gemini-2.0-flash",
+        model="gemini-2.0-flash-001",
         contents=prompt
     )
 
