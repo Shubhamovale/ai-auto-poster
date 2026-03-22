@@ -15,7 +15,13 @@ def main():
     video_path = create_reel_video(
         content["title"],
         content["points"],
+<<<<<<< Updated upstream
         content["image_keyword"]
+=======
+        content["image_keyword"],
+        content.get("video_prompt"),
+        content.get("hook_subtitle"),
+>>>>>>> Stashed changes
     )
     print(f"✅ Video created: {video_path}")
 
