@@ -20,6 +20,8 @@ def main():
         content["image_keyword"],
         content.get("video_prompt"),
         content.get("hook_subtitle"),
+        content.get("voiceover_script"),
+        content.get("video_keywords"),
     )
     print(f"✅ Video created: {video_path}")
     print(f"📝 Prompt saved: {prompt_path}")

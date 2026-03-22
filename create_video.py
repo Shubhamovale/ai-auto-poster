@@ -1,13 +1,21 @@
 import json
 import os
+import random
 import textwrap
 from io import BytesIO
 
 import numpy as np
 import requests
+from gtts import gTTS
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.audio.AudioClip import AudioArrayClip
-from moviepy.editor import ImageClip, concatenate_videoclips
+from moviepy.editor import (
+    AudioFileClip,
+    CompositeAudioClip,
+    ImageClip,
+    VideoFileClip,
+    concatenate_videoclips,
+)
 from moviepy.video.fx.fadein import fadein
 from moviepy.video.fx.fadeout import fadeout
 
@@ -53,7 +61,7 @@ def create_text_frame(
     layout="standard",
 ):
     img = background_img.copy()
-    overlay = Image.new("RGBA", img.size, (0, 0, 0, 155))
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 125))
     img = img.convert("RGBA")
     img = Image.alpha_composite(img, overlay)
     img = img.convert("RGB")
@@ -119,14 +127,14 @@ def create_text_frame(
 def create_background_music(duration, sample_rate=44100):
     timeline = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
     beat = (
-        0.18 * np.sin(2 * np.pi * 110 * timeline)
-        + 0.10 * np.sin(2 * np.pi * 220 * timeline)
-        + 0.05 * np.sin(2 * np.pi * 330 * timeline)
+        0.16 * np.sin(2 * np.pi * 110 * timeline)
+        + 0.08 * np.sin(2 * np.pi * 220 * timeline)
+        + 0.04 * np.sin(2 * np.pi * 330 * timeline)
     )
     pulse = np.sign(np.sin(2 * np.pi * 2.4 * timeline))
     envelope = 0.5 + 0.5 * pulse
-    sweep = 0.05 * np.sin(2 * np.pi * (timeline * 40 + 180) * timeline)
-    audio = ((beat * envelope) + sweep) * 0.55
+    sweep = 0.04 * np.sin(2 * np.pi * (timeline * 40 + 180) * timeline)
+    audio = ((beat * envelope) + sweep) * 0.45
     stereo = np.stack([audio, audio], axis=1).astype(np.float32)
     return AudioArrayClip(stereo, fps=sample_rate)
 
@@ -135,7 +143,7 @@ def build_video_prompt(title, points, image_keyword, video_prompt=None):
     if video_prompt and video_prompt.strip():
         return video_prompt.strip()
 
-    points_text = ", ".join(points[:5])
+    points_text = ", ".join(points[:4])
     return (
         f"Create a cinematic vertical 9:16 short video about '{title}'. "
         f"Use {image_keyword} inspired environments and visuals. "
@@ -145,25 +153,18 @@ def build_video_prompt(title, points, image_keyword, video_prompt=None):
     )
 
 
-def save_video_assets(output_dir, title, points, image_keyword, video_prompt):
+def save_video_assets(output_dir, content, video_prompt):
     os.makedirs(output_dir, exist_ok=True)
 
     prompt_path = os.path.join(output_dir, "reel_video_prompt.txt")
     with open(prompt_path, "w", encoding="utf-8") as f:
         f.write(video_prompt + "\n")
 
+    metadata = dict(content)
+    metadata["video_prompt"] = video_prompt
     metadata_path = os.path.join(output_dir, "reel_video_metadata.json")
     with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "title": title,
-                "points": points,
-                "image_keyword": image_keyword,
-                "video_prompt": video_prompt,
-            },
-            f,
-            indent=2,
-        )
+        json.dump(metadata, f, indent=2)
 
     return prompt_path, metadata_path
 
@@ -176,47 +177,151 @@ def build_motion_clip(frame, duration, zoom_start=1.0, zoom_end=1.08, fade=0.2):
     return clip
 
 
-def create_reel_video(title, points, image_keyword, video_prompt=None, hook_subtitle=None):
-    output_dir = os.path.join(os.getcwd(), "output")
-    video_prompt = build_video_prompt(title, points, image_keyword, video_prompt)
-    prompt_path, metadata_path = save_video_assets(
-        output_dir, title, points, image_keyword, video_prompt
+def has_pexels_access():
+    return bool(os.environ.get("PEXELS_API_KEY"))
+
+
+def fetch_pexels_video(query):
+    headers = {"Authorization": os.environ["PEXELS_API_KEY"]}
+    response = requests.get(
+        "https://api.pexels.com/videos/search",
+        headers=headers,
+        params={"query": query, "orientation": "portrait", "per_page": 10},
+        timeout=20,
+    )
+    response.raise_for_status()
+    videos = response.json().get("videos", [])
+    for video in videos:
+        files = sorted(
+            video.get("video_files", []),
+            key=lambda item: item.get("height", 0) * item.get("width", 0),
+            reverse=True,
+        )
+        for file_info in files:
+            if file_info.get("width", 0) >= 720 and file_info.get("height", 0) >= 1200:
+                return file_info["link"]
+    return None
+
+
+def download_file(url, path):
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
+    with open(path, "wb") as f:
+        f.write(response.content)
+    return path
+
+
+def create_voiceover(script, output_path):
+    gTTS(text=script, lang="en", slow=False).save(output_path)
+    return output_path
+
+
+def fit_vertical_clip(clip, duration):
+    clip = clip.without_audio().subclip(0, min(duration, clip.duration))
+    target_w, target_h = 1080, 1920
+    scale = max(target_w / clip.w, target_h / clip.h)
+    clip = clip.resize(scale)
+    x_center = clip.w / 2
+    y_center = clip.h / 2
+    clip = clip.crop(
+        x_center=x_center,
+        y_center=y_center,
+        width=target_w,
+        height=target_h,
+    )
+    return clip.set_duration(duration).fx(fadein, 0.12).fx(fadeout, 0.12)
+
+
+def create_stock_video_reel(content, output_dir):
+    title = content["title"]
+    points = content["points"][:4]
+    hook_subtitle = content.get("hook_subtitle") or "Wait till you see the last one."
+    keywords = content.get("video_keywords") or [content["image_keyword"], *points]
+
+    scene_specs = [
+        {"query": keywords[0], "duration": 2.4},
+        {"query": keywords[1] if len(keywords) > 1 else points[0], "duration": 2.4},
+        {"query": keywords[2] if len(keywords) > 2 else points[1], "duration": 2.4},
+        {"query": keywords[3] if len(keywords) > 3 else points[2], "duration": 2.4},
+        {"query": keywords[4] if len(keywords) > 4 else points[3], "duration": 2.4},
+    ]
+
+    downloaded = []
+    clips = []
+    for index, spec in enumerate(scene_specs):
+        link = fetch_pexels_video(spec["query"])
+        if not link:
+            raise RuntimeError(f"No stock video found for query: {spec['query']}")
+        clip_path = os.path.join(output_dir, f"scene_{index + 1}.mp4")
+        downloaded.append(download_file(link, clip_path))
+
+    for index, clip_path in enumerate(downloaded):
+        base_clip = VideoFileClip(clip_path)
+        clip = fit_vertical_clip(base_clip, scene_specs[index]["duration"])
+        clips.append(clip)
+
+    final_video = concatenate_videoclips(clips, method="compose")
+
+    voice_path = create_voiceover(
+        content["voiceover_script"],
+        os.path.join(output_dir, "voiceover.mp3"),
+    )
+    voiceover = AudioFileClip(voice_path)
+    final_video = final_video.set_duration(min(final_video.duration, voiceover.duration))
+    voiceover = voiceover.subclip(0, final_video.duration).volumex(1.0)
+    music = create_background_music(final_video.duration).volumex(0.22)
+    final_video = final_video.set_audio(CompositeAudioClip([music, voiceover]))
+
+    output_path = os.path.join(output_dir, "reel_video.mp4")
+    final_video.write_videofile(
+        output_path,
+        fps=30,
+        codec="libx264",
+        audio_codec="aac",
+        temp_audiofile=os.path.join(output_dir, "temp_audio.m4a"),
+        remove_temp=True,
+        logger=None,
     )
 
-    print("🎥 AI video prompt ready:")
-    print(video_prompt)
-    print(f"📝 Saved prompt: {prompt_path}")
-    print(f"🗂️ Saved metadata: {metadata_path}")
+    for clip in clips:
+        clip.close()
+    for path in downloaded:
+        if os.path.exists(path):
+            os.remove(path)
+    voiceover.close()
+    final_video.close()
 
-    print("🖼️  Fetching background image...")
-    bg_img = fetch_background_image(image_keyword)
+    return output_path
 
+
+def create_slideshow_reel(content, output_dir):
+    bg_img = fetch_background_image(content["image_keyword"])
+    points = content["points"][:4]
+    hook_subtitle = content.get("hook_subtitle") or "Wait till you see the last one."
     clips = []
-    colors = ["#FF4D6D", "#FFD166", "#06D6A0", "#4CC9F0", "#F72585"]
+    colors = ["#FF4D6D", "#FFD166", "#06D6A0", "#4CC9F0"]
     accent_colors = [
         (255, 77, 109),
         (255, 209, 102),
         (6, 214, 160),
         (76, 201, 240),
-        (247, 37, 133),
     ]
-    hook_subtitle = hook_subtitle or "Wait till you see the last one."
 
     hook_frame = create_text_frame(
         bg_img,
-        title,
+        content["title"],
         subtitle=hook_subtitle,
         text_color="#FFD700",
         font_size=88,
         accent_color=(255, 77, 109),
         layout="hook",
     )
-    clips.append(build_motion_clip(hook_frame, duration=2.2, zoom_start=1.0, zoom_end=1.12))
+    clips.append(build_motion_clip(hook_frame, duration=2.4, zoom_start=1.0, zoom_end=1.12))
 
-    for i, point in enumerate(points[:5]):
+    for i, point in enumerate(points):
         frame = create_text_frame(
             bg_img,
-            f"#{i+1} {point.upper()}",
+            f"#{i + 1} {point.upper()}",
             subtitle=point,
             text_color=colors[i],
             font_size=92,
@@ -225,7 +330,7 @@ def create_reel_video(title, points, image_keyword, video_prompt=None, hook_subt
         clips.append(
             build_motion_clip(
                 frame,
-                duration=1.9 if i < 3 else 1.7,
+                duration=2.0,
                 zoom_start=1.01,
                 zoom_end=1.09,
                 fade=0.16,
@@ -243,9 +348,17 @@ def create_reel_video(title, points, image_keyword, video_prompt=None, hook_subt
     )
     clips.append(build_motion_clip(cta_frame, duration=1.6, zoom_start=1.0, zoom_end=1.06))
 
-    print("🎬 Generating video...")
     final_video = concatenate_videoclips(clips, method="compose")
-    final_video = final_video.set_audio(create_background_music(final_video.duration))
+    voice_path = create_voiceover(
+        content["voiceover_script"],
+        os.path.join(output_dir, "voiceover.mp3"),
+    )
+    voiceover = AudioFileClip(voice_path)
+    target_duration = min(final_video.duration, voiceover.duration)
+    final_video = final_video.set_duration(target_duration)
+    voiceover = voiceover.subclip(0, target_duration).volumex(1.0)
+    music = create_background_music(target_duration).volumex(0.22)
+    final_video = final_video.set_audio(CompositeAudioClip([music, voiceover]))
 
     output_path = os.path.join(output_dir, "reel_video.mp4")
     final_video.write_videofile(
@@ -257,5 +370,56 @@ def create_reel_video(title, points, image_keyword, video_prompt=None, hook_subt
         remove_temp=True,
         logger=None,
     )
+    voiceover.close()
+    final_video.close()
+    return output_path
+
+
+def create_reel_video(
+    title,
+    points,
+    image_keyword,
+    video_prompt=None,
+    hook_subtitle=None,
+    voiceover_script=None,
+    video_keywords=None,
+):
+    content = {
+        "title": title,
+        "points": points,
+        "image_keyword": image_keyword,
+        "hook_subtitle": hook_subtitle,
+        "video_keywords": video_keywords,
+    }
+    output_dir = os.path.join(os.getcwd(), "output")
+    video_prompt = build_video_prompt(title, points, image_keyword, video_prompt)
+    content["video_prompt"] = video_prompt
+    content["voiceover_script"] = voiceover_script or (
+        f"Did you know these {len(points[:4])} AI tools exist? "
+        + " ".join(
+            f"Number {index + 1}: {point}."
+            for index, point in enumerate(points[:4])
+        )
+        + " Follow for more AI tools."
+    )
+    prompt_path, metadata_path = save_video_assets(output_dir, content, video_prompt)
+
+    print("🎥 AI video prompt ready:")
+    print(video_prompt)
+    print(f"📝 Saved prompt: {prompt_path}")
+    print(f"🗂️ Saved metadata: {metadata_path}")
+
+    try:
+        if has_pexels_access():
+            print("🎞️ Creating reel from real stock video clips...")
+            output_path = create_stock_video_reel(content, output_dir)
+        else:
+            print("🎞️ Pexels key missing, falling back to slideshow reel...")
+            output_path = create_slideshow_reel(content, output_dir)
+    except Exception as e:
+        print(f"Stock video reel failed: {e}")
+        print("🎞️ Falling back to slideshow reel...")
+        output_path = create_slideshow_reel(content, output_dir)
+
     print(f"✅ Video created: {output_path}")
     return output_path, prompt_path, metadata_path
