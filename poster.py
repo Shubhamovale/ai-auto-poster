@@ -22,6 +22,7 @@ def main():
         content.get("hook_subtitle"),
         content.get("voiceover_script"),
         content.get("video_keywords"),
+        content.get("subtitle_lines"),
     )
     print(f"✅ Video created: {video_path}")
     print(f"📝 Prompt saved: {prompt_path}")

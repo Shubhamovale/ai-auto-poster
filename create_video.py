@@ -12,6 +12,7 @@ from moviepy.audio.AudioClip import AudioArrayClip
 from moviepy.editor import (
     AudioFileClip,
     CompositeAudioClip,
+    CompositeVideoClip,
     ImageClip,
     VideoFileClip,
     concatenate_videoclips,
@@ -124,6 +125,42 @@ def create_text_frame(
     return np.array(img)
 
 
+def create_subtitle_overlay(text, duration, size=(1080, 1920)):
+    width, height = size
+    canvas = Image.new("RGBA", size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+
+    try:
+        font = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 58
+        )
+    except Exception:
+        font = ImageFont.load_default()
+
+    wrapped = textwrap.fill(text.upper(), width=18)
+    lines = wrapped.split("\n")
+    line_height = 72
+    total_height = len(lines) * line_height + 36
+    top = height - 420
+
+    draw.rounded_rectangle(
+        [80, top, width - 80, top + total_height],
+        radius=28,
+        fill=(0, 0, 0, 175),
+    )
+
+    y = top + 18
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font)
+        line_width = bbox[2] - bbox[0]
+        x = (width - line_width) // 2
+        draw.text((x + 3, y + 3), line, font=font, fill="black")
+        draw.text((x, y), line, font=font, fill="white")
+        y += line_height
+
+    return ImageClip(np.array(canvas)).set_duration(duration)
+
+
 def create_background_music(duration, sample_rate=44100):
     timeline = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
     beat = (
@@ -233,17 +270,16 @@ def fit_vertical_clip(clip, duration):
 
 
 def create_stock_video_reel(content, output_dir):
-    title = content["title"]
     points = content["points"][:4]
-    hook_subtitle = content.get("hook_subtitle") or "Wait till you see the last one."
     keywords = content.get("video_keywords") or [content["image_keyword"], *points]
+    subtitle_lines = content.get("subtitle_lines") or []
 
     scene_specs = [
-        {"query": keywords[0], "duration": 2.4},
-        {"query": keywords[1] if len(keywords) > 1 else points[0], "duration": 2.4},
-        {"query": keywords[2] if len(keywords) > 2 else points[1], "duration": 2.4},
-        {"query": keywords[3] if len(keywords) > 3 else points[2], "duration": 2.4},
-        {"query": keywords[4] if len(keywords) > 4 else points[3], "duration": 2.4},
+        {"query": keywords[0], "duration": 2.4, "subtitle": subtitle_lines[0] if len(subtitle_lines) > 0 else content["title"]},
+        {"query": keywords[1] if len(keywords) > 1 else points[0], "duration": 2.4, "subtitle": subtitle_lines[1] if len(subtitle_lines) > 1 else points[0]},
+        {"query": keywords[2] if len(keywords) > 2 else points[1], "duration": 2.4, "subtitle": subtitle_lines[2] if len(subtitle_lines) > 2 else points[1]},
+        {"query": keywords[3] if len(keywords) > 3 else points[2], "duration": 2.4, "subtitle": subtitle_lines[3] if len(subtitle_lines) > 3 else points[2]},
+        {"query": keywords[4] if len(keywords) > 4 else points[3], "duration": 2.4, "subtitle": subtitle_lines[4] if len(subtitle_lines) > 4 else points[3]},
     ]
 
     downloaded = []
@@ -258,6 +294,12 @@ def create_stock_video_reel(content, output_dir):
     for index, clip_path in enumerate(downloaded):
         base_clip = VideoFileClip(clip_path)
         clip = fit_vertical_clip(base_clip, scene_specs[index]["duration"])
+        subtitle_clip = create_subtitle_overlay(
+            scene_specs[index]["subtitle"], scene_specs[index]["duration"]
+        )
+        clip = CompositeVideoClip([clip, subtitle_clip.set_position(("center", "bottom"))]).set_duration(
+            scene_specs[index]["duration"]
+        )
         clips.append(clip)
 
     final_video = concatenate_videoclips(clips, method="compose")
@@ -301,6 +343,7 @@ def create_slideshow_reel(content, output_dir):
     bg_img = fetch_background_image(content["image_keyword"])
     points = content["points"][:4]
     hook_subtitle = content.get("hook_subtitle") or "Wait till you see the last one."
+    subtitle_lines = content.get("subtitle_lines") or []
     clips = []
     colors = ["#FF4D6D", "#FFD166", "#06D6A0", "#4CC9F0"]
     accent_colors = [
@@ -319,7 +362,12 @@ def create_slideshow_reel(content, output_dir):
         accent_color=(255, 77, 109),
         layout="hook",
     )
-    clips.append(build_motion_clip(hook_frame, duration=2.4, zoom_start=1.0, zoom_end=1.12))
+    hook_clip = build_motion_clip(hook_frame, duration=2.4, zoom_start=1.0, zoom_end=1.12)
+    hook_subtitles = create_subtitle_overlay(
+        subtitle_lines[0] if len(subtitle_lines) > 0 else content["title"],
+        2.4,
+    )
+    clips.append(CompositeVideoClip([hook_clip, hook_subtitles.set_position(("center", "bottom"))]).set_duration(2.4))
 
     for i, point in enumerate(points):
         frame = create_text_frame(
@@ -330,14 +378,19 @@ def create_slideshow_reel(content, output_dir):
             font_size=92,
             accent_color=accent_colors[i],
         )
-        clips.append(
-            build_motion_clip(
+        point_clip = build_motion_clip(
                 frame,
                 duration=2.0,
                 zoom_start=1.01,
                 zoom_end=1.09,
                 fade=0.16,
             )
+        subtitle_clip = create_subtitle_overlay(
+            subtitle_lines[i + 1] if len(subtitle_lines) > i + 1 else point,
+            2.0,
+        )
+        clips.append(
+            CompositeVideoClip([point_clip, subtitle_clip.set_position(("center", "bottom"))]).set_duration(2.0)
         )
 
     cta_frame = create_text_frame(
@@ -349,7 +402,12 @@ def create_slideshow_reel(content, output_dir):
         accent_color=(6, 214, 160),
         layout="hook",
     )
-    clips.append(build_motion_clip(cta_frame, duration=1.6, zoom_start=1.0, zoom_end=1.06))
+    cta_clip = build_motion_clip(cta_frame, duration=1.6, zoom_start=1.0, zoom_end=1.06)
+    cta_subtitles = create_subtitle_overlay(
+        subtitle_lines[5] if len(subtitle_lines) > 5 else "FOLLOW FOR MORE AI TOOLS",
+        1.6,
+    )
+    clips.append(CompositeVideoClip([cta_clip, cta_subtitles.set_position(("center", "bottom"))]).set_duration(1.6))
 
     final_video = concatenate_videoclips(clips, method="compose")
     voice_path = create_voiceover(
@@ -388,6 +446,7 @@ def create_reel_video(
     hook_subtitle=None,
     voiceover_script=None,
     video_keywords=None,
+    subtitle_lines=None,
 ):
     content = {
         "title": title,
@@ -395,6 +454,7 @@ def create_reel_video(
         "image_keyword": image_keyword,
         "hook_subtitle": hook_subtitle,
         "video_keywords": video_keywords,
+        "subtitle_lines": subtitle_lines,
     }
     output_dir = os.path.join(os.getcwd(), "output")
     video_prompt = build_video_prompt(title, points, image_keyword, video_prompt)
