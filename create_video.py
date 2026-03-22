@@ -11,6 +11,9 @@ from moviepy.editor import ImageClip, concatenate_videoclips
 from moviepy.video.fx.fadein import fadein
 from moviepy.video.fx.fadeout import fadeout
 
+if not hasattr(Image, "ANTIALIAS"):
+    Image.ANTIALIAS = Image.Resampling.LANCZOS
+
 
 def fetch_background_image(keyword):
     try:
