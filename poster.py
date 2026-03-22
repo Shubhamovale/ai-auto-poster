@@ -1,8 +1,10 @@
-from generate_content import generate_post_content
+import traceback
+
 from create_video import create_reel_video
+from generate_content import generate_post_content
 from post_facebook import post_to_facebook
 from post_youtube import post_to_youtube
-import traceback
+
 
 def main():
     print("🚀 Starting AI Auto Poster...")
@@ -12,18 +14,16 @@ def main():
     print(f"✅ Content generated: {content['title']}")
 
     print("🎬 Creating video...")
-    video_path = create_reel_video(
+    video_path, prompt_path, metadata_path = create_reel_video(
         content["title"],
         content["points"],
-<<<<<<< Updated upstream
-        content["image_keyword"]
-=======
         content["image_keyword"],
         content.get("video_prompt"),
         content.get("hook_subtitle"),
->>>>>>> Stashed changes
     )
     print(f"✅ Video created: {video_path}")
+    print(f"📝 Prompt saved: {prompt_path}")
+    print(f"🗂️ Metadata saved: {metadata_path}")
 
     print("📤 Posting to Facebook...")
     post_to_facebook(content["caption"], video_path)
@@ -33,9 +33,10 @@ def main():
         content["youtube_title"],
         content["youtube_description"],
         content["youtube_tags"],
-        video_path
+        video_path,
     )
     print("🎉 All done!")
+
 
 if __name__ == "__main__":
     try:

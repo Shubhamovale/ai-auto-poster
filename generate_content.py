@@ -1,7 +1,9 @@
-import os
 import json
+import os
 import random
+
 from google import genai
+
 
 def generate_post_content():
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
@@ -13,15 +15,10 @@ def generate_post_content():
     prompt = f"""Create viral social media content about: "{topic}"
 Return ONLY JSON no extra text:
 {{
-<<<<<<< Updated upstream
-    "title": "SHOCKING HOOK TITLE MAX 6 WORDS",
-    "points": ["point 1", "point 2", "point 3", "point 4", "point 5"],
-=======
     "title": "Pattern interrupt hook, max 5 words, all caps",
     "hook_subtitle": "One short curiosity line that makes people keep watching",
     "points": ["short punchy point 1", "short punchy point 2", "short punchy point 3", "short punchy point 4", "short punchy point 5"],
     "video_prompt": "Vertical 9:16 cinematic AI video prompt with scene, subject, motion, lighting, camera movement, mood, and no on-screen text",
->>>>>>> Stashed changes
     "caption": "caption with emojis and hashtags",
     "image_keyword": "keyword",
     "youtube_title": "YouTube title max 60 chars",
@@ -38,14 +35,11 @@ Rules:
 
     response = client.models.generate_content(
         model="models/gemini-2.5-flash",
-        contents=prompt
+        contents=prompt,
     )
 
     text = response.text.strip()
     text = text.replace("```json", "").replace("```", "").strip()
-<<<<<<< Updated upstream
-    return json.loads(text)
-=======
     content = json.loads(text)
 
     if "video_prompt" not in content or not content["video_prompt"].strip():
@@ -62,4 +56,3 @@ Rules:
         content["hook_subtitle"] = "These tools save money fast."
 
     return content
->>>>>>> Stashed changes

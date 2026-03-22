@@ -1,13 +1,16 @@
-import requests
+import json
 import os
 import textwrap
+from io import BytesIO
+
+import numpy as np
+import requests
 from PIL import Image, ImageDraw, ImageFont
-from moviepy.editor import ImageClip, concatenate_videoclips, AudioFileClip
 from moviepy.audio.AudioClip import AudioArrayClip
+from moviepy.editor import ImageClip, concatenate_videoclips
 from moviepy.video.fx.fadein import fadein
 from moviepy.video.fx.fadeout import fadeout
-import numpy as np
-from io import BytesIO
+
 
 def fetch_background_image(keyword):
     try:
@@ -19,29 +22,23 @@ def fetch_background_image(keyword):
         resp = requests.get(url, timeout=10)
         data = resp.json()
         print(f"Unsplash response keys: {list(data.keys())}")
-        
-        # Handle both single photo and error response
+
         if "urls" in data:
             img_url = data["urls"]["regular"]
         elif "errors" in data:
             print(f"Unsplash error: {data['errors']}")
-            # Fallback to a default image color
-            img = Image.new("RGB", (1080, 1920), color=(30, 30, 50))
-            return img
+            return Image.new("RGB", (1080, 1920), color=(30, 30, 50))
         else:
             print(f"Unexpected response: {data}")
-            img = Image.new("RGB", (1080, 1920), color=(30, 30, 50))
-            return img
-            
+            return Image.new("RGB", (1080, 1920), color=(30, 30, 50))
+
         img_data = requests.get(img_url, timeout=10).content
         img = Image.open(BytesIO(img_data)).convert("RGB")
-        img = img.resize((1080, 1920))
-        return img
-        
+        return img.resize((1080, 1920))
     except Exception as e:
         print(f"Image fetch failed: {e}, using fallback")
-        img = Image.new("RGB", (1080, 1920), color=(30, 30, 50))
-        return img
+        return Image.new("RGB", (1080, 1920), color=(30, 30, 50))
+
 
 def create_text_frame(
     background_img,
@@ -60,50 +57,48 @@ def create_text_frame(
     draw = ImageDraw.Draw(img)
 
     try:
-        font_big   = ImageFont.truetype(
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
-        font_sub   = ImageFont.truetype(
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 45)
+        font_big = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size
+        )
+        font_sub = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 45
+        )
         font_brand = ImageFont.truetype(
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
-    except:
-        font_big   = ImageFont.load_default()
-        font_sub   = ImageFont.load_default()
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40
+        )
+    except Exception:
+        font_big = ImageFont.load_default()
+        font_sub = ImageFont.load_default()
         font_brand = ImageFont.load_default()
 
-    # Top branding bar
     draw.rectangle([0, 0, 1080, 110], fill=accent_color)
     draw.text((30, 30), "AI AUTO POSTER", font=font_brand, fill="white")
 
-    # Main text
     wrap_width = 14 if layout == "hook" else 18
     wrapped = textwrap.fill(text, width=wrap_width)
-    lines   = wrapped.split("\n")
+    lines = wrapped.split("\n")
     y_start = 520 if layout == "hook" else 760
     for line in lines:
         bbox = draw.textbbox((0, 0), line, font=font_big)
-        w    = bbox[2] - bbox[0]
-        x    = (1080 - w) // 2
-        pad_x = 28
-        pad_y = 18
+        w = bbox[2] - bbox[0]
+        x = (1080 - w) // 2
         draw.rounded_rectangle(
-            [x - pad_x, y_start - pad_y, x + w + pad_x, y_start + font_size + pad_y],
+            [x - 28, y_start - 18, x + w + 28, y_start + font_size + 18],
             radius=24,
             fill=(0, 0, 0, 165),
         )
-        draw.text((x+3, y_start+3), line, font=font_big, fill="black")
-        draw.text((x, y_start),     line, font=font_big, fill=text_color)
+        draw.text((x + 3, y_start + 3), line, font=font_big, fill="black")
+        draw.text((x, y_start), line, font=font_big, fill=text_color)
         y_start += font_size + 26
 
-    # Subtitle
     if subtitle:
         wrapped_sub = textwrap.fill(subtitle, width=24 if layout == "hook" else 28)
-        sub_lines   = wrapped_sub.split("\n")
-        y_sub       = y_start + 34
+        sub_lines = wrapped_sub.split("\n")
+        y_sub = y_start + 34
         for line in sub_lines:
             bbox = draw.textbbox((0, 0), line, font=font_sub)
-            w    = bbox[2] - bbox[0]
-            x    = (1080 - w) // 2
+            w = bbox[2] - bbox[0]
+            x = (1080 - w) // 2
             draw.rounded_rectangle(
                 [x - 24, y_sub - 12, x + w + 24, y_sub + 54],
                 radius=20,
@@ -112,16 +107,14 @@ def create_text_frame(
             draw.text((x, y_sub), line, font=font_sub, fill="#FFD700")
             y_sub += 55
 
-    # Bottom CTA bar
     draw.rectangle([0, 1815, 1080, 1920], fill=accent_color)
-    draw.text((30, 1844), "FOLLOW FOR DAILY AI SHORTS",
-              font=font_brand, fill="white")
+    draw.text((30, 1844), "FOLLOW FOR DAILY AI SHORTS", font=font_brand, fill="white")
 
     return np.array(img)
 
+
 def create_background_music(duration, sample_rate=44100):
     timeline = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-
     beat = (
         0.18 * np.sin(2 * np.pi * 110 * timeline)
         + 0.10 * np.sin(2 * np.pi * 220 * timeline)
@@ -130,14 +123,11 @@ def create_background_music(duration, sample_rate=44100):
     pulse = np.sign(np.sin(2 * np.pi * 2.4 * timeline))
     envelope = 0.5 + 0.5 * pulse
     sweep = 0.05 * np.sin(2 * np.pi * (timeline * 40 + 180) * timeline)
-
     audio = ((beat * envelope) + sweep) * 0.55
     stereo = np.stack([audio, audio], axis=1).astype(np.float32)
     return AudioArrayClip(stereo, fps=sample_rate)
 
-<<<<<<< Updated upstream
-def create_reel_video(title, points, image_keyword):
-=======
+
 def build_video_prompt(title, points, image_keyword, video_prompt=None):
     if video_prompt and video_prompt.strip():
         return video_prompt.strip()
@@ -195,11 +185,10 @@ def create_reel_video(title, points, image_keyword, video_prompt=None, hook_subt
     print(f"📝 Saved prompt: {prompt_path}")
     print(f"🗂️ Saved metadata: {metadata_path}")
 
->>>>>>> Stashed changes
     print("🖼️  Fetching background image...")
     bg_img = fetch_background_image(image_keyword)
 
-    clips  = []
+    clips = []
     colors = ["#FF4D6D", "#FFD166", "#06D6A0", "#4CC9F0", "#F72585"]
     accent_colors = [
         (255, 77, 109),
@@ -210,9 +199,9 @@ def create_reel_video(title, points, image_keyword, video_prompt=None, hook_subt
     ]
     hook_subtitle = hook_subtitle or "Wait till you see the last one."
 
-    # Hook clip
     hook_frame = create_text_frame(
-        bg_img, title,
+        bg_img,
+        title,
         subtitle=hook_subtitle,
         text_color="#FFD700",
         font_size=88,
@@ -221,10 +210,10 @@ def create_reel_video(title, points, image_keyword, video_prompt=None, hook_subt
     )
     clips.append(build_motion_clip(hook_frame, duration=2.2, zoom_start=1.0, zoom_end=1.12))
 
-    # Points clips
     for i, point in enumerate(points[:5]):
         frame = create_text_frame(
-            bg_img, f"#{i+1} {point.upper()}",
+            bg_img,
+            f"#{i+1} {point.upper()}",
             subtitle=point,
             text_color=colors[i],
             font_size=92,
@@ -240,7 +229,6 @@ def create_reel_video(title, points, image_keyword, video_prompt=None, hook_subt
             )
         )
 
-    # CTA clip
     cta_frame = create_text_frame(
         bg_img,
         "FOLLOW FOR PART 2",
@@ -252,23 +240,19 @@ def create_reel_video(title, points, image_keyword, video_prompt=None, hook_subt
     )
     clips.append(build_motion_clip(cta_frame, duration=1.6, zoom_start=1.0, zoom_end=1.06))
 
-    # Concatenate
     print("🎬 Generating video...")
     final_video = concatenate_videoclips(clips, method="compose")
-
-    # Add built-in music bed for cloud runs without external downloads.
     final_video = final_video.set_audio(create_background_music(final_video.duration))
 
-    # Export
-    output_path = "/tmp/reel_video.mp4"
+    output_path = os.path.join(output_dir, "reel_video.mp4")
     final_video.write_videofile(
         output_path,
         fps=30,
         codec="libx264",
         audio_codec="aac",
-        temp_audiofile="/tmp/temp_audio.m4a",
+        temp_audiofile=os.path.join(output_dir, "temp_audio.m4a"),
         remove_temp=True,
-        logger=None
+        logger=None,
     )
     print(f"✅ Video created: {output_path}")
-    return output_path
+    return output_path, prompt_path, metadata_path
