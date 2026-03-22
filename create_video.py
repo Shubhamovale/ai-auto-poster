@@ -267,10 +267,12 @@ def create_stock_video_reel(content, output_dir):
         os.path.join(output_dir, "voiceover.mp3"),
     )
     voiceover = AudioFileClip(voice_path)
-    final_video = final_video.set_duration(min(final_video.duration, voiceover.duration))
-    voiceover = voiceover.subclip(0, final_video.duration).volumex(1.0)
-    music = create_background_music(final_video.duration).volumex(0.22)
-    final_video = final_video.set_audio(CompositeAudioClip([music, voiceover]))
+    target_duration = min(final_video.duration, voiceover.duration)
+    final_video = final_video.set_duration(target_duration)
+    voiceover = voiceover.subclip(0, target_duration).volumex(1.0)
+    music = create_background_music(target_duration).set_duration(target_duration).volumex(0.22)
+    mixed_audio = CompositeAudioClip([music, voiceover]).set_duration(target_duration)
+    final_video = final_video.set_audio(mixed_audio)
 
     output_path = os.path.join(output_dir, "reel_video.mp4")
     final_video.write_videofile(
@@ -288,6 +290,7 @@ def create_stock_video_reel(content, output_dir):
     for path in downloaded:
         if os.path.exists(path):
             os.remove(path)
+    mixed_audio.close()
     voiceover.close()
     final_video.close()
 
@@ -357,8 +360,9 @@ def create_slideshow_reel(content, output_dir):
     target_duration = min(final_video.duration, voiceover.duration)
     final_video = final_video.set_duration(target_duration)
     voiceover = voiceover.subclip(0, target_duration).volumex(1.0)
-    music = create_background_music(target_duration).volumex(0.22)
-    final_video = final_video.set_audio(CompositeAudioClip([music, voiceover]))
+    music = create_background_music(target_duration).set_duration(target_duration).volumex(0.22)
+    mixed_audio = CompositeAudioClip([music, voiceover]).set_duration(target_duration)
+    final_video = final_video.set_audio(mixed_audio)
 
     output_path = os.path.join(output_dir, "reel_video.mp4")
     final_video.write_videofile(
@@ -370,6 +374,7 @@ def create_slideshow_reel(content, output_dir):
         remove_temp=True,
         logger=None,
     )
+    mixed_audio.close()
     voiceover.close()
     final_video.close()
     return output_path
