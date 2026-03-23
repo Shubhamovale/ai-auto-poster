@@ -1,10 +1,18 @@
-from generate_content import generate_post_content
+import traceback
+
 from create_video import create_reel_video
+<<<<<<< HEAD
 from archive_media import archive_run
 from post_facebook import post_to_facebook
 from post_youtube import post_to_youtube
 import os
 import traceback
+=======
+from generate_content import generate_post_content
+from post_facebook import post_to_facebook
+from post_youtube import post_to_youtube
+
+>>>>>>> production
 
 
 def require_env_vars():
@@ -36,9 +44,19 @@ def main():
         content["title"],
         content["points"],
         content["image_keyword"],
+<<<<<<< HEAD
         content.get("video_prompt")
+=======
+        content.get("video_prompt"),
+        content.get("hook_subtitle"),
+        content.get("voiceover_script"),
+        content.get("video_keywords"),
+        content.get("subtitle_lines"),
+>>>>>>> production
     )
     print(f"✅ Video created: {video_path}")
+    print(f"📝 Prompt saved: {prompt_path}")
+    print(f"🗂️ Metadata saved: {metadata_path}")
 
     archive_result = archive_run(video_path, prompt_path, metadata_path)
     if archive_result.get("video"):
@@ -52,9 +70,10 @@ def main():
         content["youtube_title"],
         content["youtube_description"],
         content["youtube_tags"],
-        video_path
+        video_path,
     )
     print("🎉 All done!")
+
 
 if __name__ == "__main__":
     try:
