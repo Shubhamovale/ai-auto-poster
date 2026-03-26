@@ -1,9 +1,8 @@
 import traceback
 
-from create_video import create_reel_video
+from create_image import create_trending_poster
 from generate_content import generate_post_content
 from post_facebook import post_to_facebook
-from post_youtube import post_to_youtube
 
 
 def main():
@@ -13,31 +12,25 @@ def main():
     content = generate_post_content()
     print(f"✅ Content generated: {content['title']}")
 
-    print("🎬 Creating video...")
-    video_path, prompt_path, metadata_path = create_reel_video(
+    print("🖼️ Creating Facebook image...")
+    image_path = create_trending_poster(
         content["title"],
-        content["points"],
-        content["image_keyword"],
-        content.get("video_prompt"),
         content.get("hook_subtitle"),
-        content.get("voiceover_script"),
-        content.get("video_keywords"),
-        content.get("subtitle_lines"),
+        content.get("headline", content["title"]),
+        content.get("hero_keyword", content["image_keyword"]),
+        content.get("badge_left_keyword", content["image_keyword"]),
+        content.get("badge_right_keyword", content["image_keyword"]),
+        content.get("badge_left_value", "500M"),
+        content.get("badge_left_label", "12 HOURS"),
+        content.get("badge_right_value", "475M"),
+        content.get("badge_right_label", "24 HOURS"),
+        content.get("category_label", "NEWS"),
+        content.get("points"),
     )
-    print(f"✅ Video created: {video_path}")
-    print(f"📝 Prompt saved: {prompt_path}")
-    print(f"🗂️ Metadata saved: {metadata_path}")
+    print(f"✅ Image created: {image_path}")
 
     print("📤 Posting to Facebook...")
-    post_to_facebook(content["caption"], video_path)
-
-    print("📤 Posting to YouTube...")
-    post_to_youtube(
-        content["youtube_title"],
-        content["youtube_description"],
-        content["youtube_tags"],
-        video_path,
-    )
+    post_to_facebook(content["caption"], image_path)
     print("🎉 All done!")
 
 

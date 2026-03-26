@@ -2,35 +2,13 @@ import requests
 import os
 
 
-def post_to_facebook(caption, video_path):
+def post_to_facebook(caption, image_path):
     page_id    = os.environ["FB_PAGE_ID"]
     page_token = os.environ["FB_PAGE_ACCESS_TOKEN"]
 
     print("📤 Posting to Facebook as photo post...")
-    
-    # Use thumbnail instead of video for now
-    thumb_path = video_path.replace(".mp4", "_thumb.jpg")
-    
-    # Extract first frame as thumbnail
-    import subprocess
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-y",
-            "-ss",
-            "00:00:01",
-            "-i",
-            video_path,
-            "-frames:v",
-            "1",
-            "-update",
-            "1",
-            thumb_path,
-        ],
-        check=True,
-    )
 
-    with open(thumb_path, "rb") as img_file:
+    with open(image_path, "rb") as img_file:
         response = requests.post(
             f"https://graph.facebook.com/{page_id}/photos",
             data={

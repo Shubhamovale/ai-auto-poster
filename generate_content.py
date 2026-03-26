@@ -1,27 +1,44 @@
 import json
 import os
-import random
 
 from google import genai
+from trending_topics import get_random_topic
+
+
+def build_caption(base_caption, content):
+    parts = [base_caption.strip()]
+
+    if content.get("is_live_trend"):
+        source_name = content.get("source_name", "Google News")
+        source_query = content.get("source_query", "Trend")
+        parts.append(f"Source: {source_name} ({source_query})")
+
+    if content.get("source_link"):
+        parts.append(content["source_link"])
+
+    return "\n\n".join(part for part in parts if part)
 
 
 def generate_post_content():
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-
-    with open("topics.json") as f:
-        topics = json.load(f)["topics"]
-    topic = random.choice(topics)
+    topic_info = get_random_topic()
+    topic = topic_info["topic"]
 
     prompt = f"""Create viral social media content about: "{topic}"
 Return ONLY JSON no extra text:
 {{
-    "title": "English viral hook, max 5 words, all caps",
-    "hook_subtitle": "One short English curiosity line that makes people keep watching",
+    "title": "BIG ALL-CAPS POSTER HOOK",
+    "hook_subtitle": "Short supporting line",
     "points": ["short punchy point 1", "short punchy point 2", "short punchy point 3", "short punchy point 4"],
-    "video_keywords": ["hook visual keyword", "point 1 visual keyword", "point 2 visual keyword", "point 3 visual keyword", "point 4 visual keyword"],
-    "voiceover_script": "Short natural English reel narration that says the hook and all 4 points clearly in under 18 seconds",
-    "subtitle_lines": ["Hook subtitle line", "Point 1 subtitle", "Point 2 subtitle", "Point 3 subtitle", "Point 4 subtitle", "Call to action subtitle"],
-    "video_prompt": "Vertical 9:16 cinematic AI video prompt with scene, subject, motion, lighting, camera movement, mood, and no on-screen text",
+    "hero_keyword": "main visual keyword",
+    "badge_left_keyword": "left badge visual keyword",
+    "badge_right_keyword": "right badge visual keyword",
+    "badge_left_value": "500M",
+    "badge_left_label": "12 HOURS",
+    "badge_right_value": "475M",
+    "badge_right_label": "24 HOURS",
+    "category_label": "NEWS",
+    "headline": "Bold dramatic 2 to 4 line headline in all caps for a social news poster",
     "caption": "caption with emojis and hashtags",
     "image_keyword": "keyword",
     "youtube_title": "YouTube title max 60 chars",
@@ -30,13 +47,12 @@ Return ONLY JSON no extra text:
 }}
 
 Rules:
-- Title must feel like a scrolling stop hook.
-- hook_subtitle must create curiosity or promise a payoff.
+- Make it feel like a dramatic trending-news social poster.
+- Title and headline must be in English and highly clickable.
+- Use realistic numeric comparison values for the two badges.
+- `hero_keyword`, `badge_left_keyword`, and `badge_right_keyword` should describe visuals to search.
 - Each point must be 3 to 8 words, simple and visual.
-- Return exactly 4 points.
-- `video_keywords` should be useful for finding real stock clips.
-- `voiceover_script` should sound like an English viral short narrator.
-- `subtitle_lines` must be short English captions for each beat.
+- The poster should reflect a current or recent trend when the topic sounds newsy.
 - Prefer strong, surprising wording over generic advice.
 """
 
@@ -49,41 +65,24 @@ Rules:
     text = text.replace("```json", "").replace("```", "").strip()
     content = json.loads(text)
 
-    if "video_prompt" not in content or not content["video_prompt"].strip():
-        points_text = ", ".join(content.get("points", []))
-        content["video_prompt"] = (
-            f"Create a high-energy vertical 9:16 social video about {topic}. "
-            f"Open with a striking visual hook inspired by '{content.get('title', topic)}'. "
-            f"Show cinematic scenes that represent these ideas: {points_text}. "
-            f"Use dynamic camera motion, crisp lighting, modern tech aesthetics, fast-paced cuts, "
-            f"and expressive detail. No subtitles, no logos, no on-screen text."
-        )
-
     if "hook_subtitle" not in content or not content["hook_subtitle"].strip():
         content["hook_subtitle"] = "These tools save money fast."
 
-    if "video_keywords" not in content or len(content["video_keywords"]) < 5:
-        content["video_keywords"] = [
-            content.get("image_keyword", topic),
-            *content.get("points", [])[:4],
-        ]
-
-    if "voiceover_script" not in content or not content["voiceover_script"].strip():
-        numbered_points = " ".join(
-            f"Number {index + 1}: {point}."
-            for index, point in enumerate(content.get("points", [])[:4])
-        )
-        content["voiceover_script"] = (
-            f"Did you know these 4 AI tools exist? {numbered_points} "
-            "Follow for more AI tools and secrets."
-        )
-
-    if "subtitle_lines" not in content or len(content["subtitle_lines"]) < 6:
-        points = content.get("points", [])[:4]
-        content["subtitle_lines"] = [
-            content.get("title", "AI TOOLS YOU NEED"),
-            *(point.upper() for point in points),
-            "FOLLOW FOR MORE AI TOOLS",
-        ]
+    content.setdefault("hero_keyword", content.get("image_keyword", topic))
+    content.setdefault("badge_left_keyword", content.get("hero_keyword", topic))
+    content.setdefault("badge_right_keyword", content.get("hero_keyword", topic))
+    content.setdefault("badge_left_value", "500M")
+    content.setdefault("badge_left_label", "12 HOURS")
+    content.setdefault("badge_right_value", "475M")
+    content.setdefault("badge_right_label", "24 HOURS")
+    content.setdefault("category_label", "NEWS")
+    content.setdefault("headline", content.get("title", topic).upper())
+    content["topic"] = topic
+    content["source_name"] = topic_info["source_name"]
+    content["source_link"] = topic_info["source_link"]
+    content["source_query"] = topic_info["source_query"]
+    content["published_at"] = topic_info["published_at"]
+    content["is_live_trend"] = topic_info["is_live_trend"]
+    content["caption"] = build_caption(content.get("caption", ""), content)
 
     return content
