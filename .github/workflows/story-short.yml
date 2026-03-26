@@ -1,0 +1,48 @@
+name: Story Short
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 5 * * *'   # 10:45 AM IST
+
+jobs:
+  story-short:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate story short
+        env:
+          GEMINI_API_KEY:          ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY:          ${{ secrets.PEXELS_API_KEY }}
+          TREND_CATEGORY:          ${{ vars.TREND_CATEGORY }}
+          YOUTUBE_CLIENT_ID:       ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET:   ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN:   ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: python story_short.py
+
+      - name: Upload story short artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: story-short-output-${{ github.run_id }}
+          path: output/
+          if-no-files-found: ignore
+          retention-days: 7
