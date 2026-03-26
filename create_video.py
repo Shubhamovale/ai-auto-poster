@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import re
 import textwrap
 from io import BytesIO
 
@@ -175,15 +176,31 @@ def build_scene_durations(target_duration, scene_count):
 
 def create_background_music(duration, sample_rate=44100):
     timeline = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    beat = (
-        0.16 * np.sin(2 * np.pi * 110 * timeline)
-        + 0.08 * np.sin(2 * np.pi * 220 * timeline)
-        + 0.04 * np.sin(2 * np.pi * 330 * timeline)
+
+    bpm = 108
+    beats_per_second = bpm / 60.0
+    beat_phase = timeline * beats_per_second
+    beat_fraction = beat_phase - np.floor(beat_phase)
+
+    kick = np.sin(2 * np.pi * 55 * timeline) * np.exp(-10 * beat_fraction)
+    snare_mask = ((np.floor(beat_phase) % 2) == 1).astype(np.float32)
+    snare = snare_mask * np.random.normal(0, 0.22, len(timeline)) * np.exp(-20 * beat_fraction)
+    hat = np.random.normal(0, 0.08, len(timeline)) * np.exp(-55 * beat_fraction)
+
+    progression = np.array([110.0, 146.83, 164.81, 130.81], dtype=np.float32)
+    chord_index = ((timeline / 2.0).astype(int)) % len(progression)
+    root = progression[chord_index]
+    pad = (
+        0.12 * np.sin(2 * np.pi * root * timeline)
+        + 0.08 * np.sin(2 * np.pi * (root * 1.25) * timeline)
+        + 0.06 * np.sin(2 * np.pi * (root * 1.5) * timeline)
     )
-    pulse = np.sign(np.sin(2 * np.pi * 2.4 * timeline))
-    envelope = 0.5 + 0.5 * pulse
-    sweep = 0.04 * np.sin(2 * np.pi * (timeline * 40 + 180) * timeline)
-    audio = ((beat * envelope) + sweep) * 0.45
+    bass = 0.10 * np.sin(2 * np.pi * (root / 2.0) * timeline)
+    lead = 0.04 * np.sin(2 * np.pi * (root * 2.0) * timeline + np.sin(2 * np.pi * 0.35 * timeline))
+
+    sidechain = 1.0 - 0.22 * np.exp(-18 * beat_fraction)
+    audio = ((0.34 * kick) + (0.20 * snare) + (0.12 * hat) + pad + bass + lead) * sidechain
+    audio = np.clip(audio * 0.58, -0.95, 0.95)
     stereo = np.stack([audio, audio], axis=1).astype(np.float32)
     return AudioArrayClip(stereo, fps=sample_rate)
 
@@ -260,9 +277,52 @@ def download_file(url, path):
     return path
 
 
+def has_elevenlabs_access():
+    return bool(os.environ.get("ELEVENLABS_API_KEY"))
+
+
+def create_elevenlabs_voiceover(script, output_path):
+    voice_id = os.environ.get("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
+    response = requests.post(
+        f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+        headers={
+            "xi-api-key": os.environ["ELEVENLABS_API_KEY"],
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        },
+        json={
+            "text": script,
+            "model_id": "eleven_multilingual_v2",
+            "voice_settings": {
+                "stability": 0.42,
+                "similarity_boost": 0.82,
+                "style": 0.28,
+                "use_speaker_boost": True,
+            },
+        },
+        timeout=120,
+    )
+    response.raise_for_status()
+    with open(output_path, "wb") as f:
+        f.write(response.content)
+    return output_path
+
+
 def create_voiceover(script, output_path):
+    if has_elevenlabs_access():
+        try:
+            print("🎙️ Using ElevenLabs voiceover...")
+            return create_elevenlabs_voiceover(script, output_path)
+        except Exception as e:
+            print(f"ElevenLabs voiceover failed: {e}. Falling back to gTTS.")
+
     gTTS(text=script, lang="en", slow=False).save(output_path)
     return output_path
+
+
+def split_sentences(text):
+    sentences = re.split(r"(?<=[.!?])\s+", (text or "").strip())
+    return [sentence.strip() for sentence in sentences if sentence.strip()]
 
 
 def fit_vertical_clip(clip, duration):

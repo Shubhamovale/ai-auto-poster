@@ -1,5 +1,6 @@
 import json
 import os
+import re
 
 from moviepy.editor import (
     AudioFileClip,
@@ -17,14 +18,24 @@ from create_video import (
     fetch_pexels_video,
     fit_vertical_clip,
     has_pexels_access,
+    split_sentences,
 )
 
 
-def build_scene_durations(total_duration, scene_count):
-    base = max(4.5, total_duration / max(scene_count, 1))
-    durations = [base] * scene_count
-    if scene_count >= 1:
-        durations[0] = max(5.5, durations[0] + 1.0)
+def build_scene_durations(total_duration, subtitles):
+    scene_count = max(len(subtitles), 1)
+    word_counts = [max(3, len(re.findall(r"\w+", subtitle))) for subtitle in subtitles]
+    if not word_counts:
+        word_counts = [8]
+    total_words = sum(word_counts)
+    durations = [max(3.2, total_duration * (count / total_words)) for count in word_counts]
+    scale = total_duration / sum(durations)
+    durations = [duration * scale for duration in durations]
+    if durations:
+        durations[0] = max(4.8, durations[0])
+        durations[-1] = max(3.8, durations[-1])
+        scale = total_duration / sum(durations)
+        durations = [duration * scale for duration in durations]
     return durations
 
 
@@ -77,14 +88,19 @@ def create_story_short(content):
     voiceover = AudioFileClip(voice_path)
     target_duration = max(45.0, min(75.0, voiceover.duration + 2.0))
 
-    keywords = (content.get("scene_keywords") or [])[:8]
+    keywords = (content.get("scene_keywords") or [])[:10]
     if not keywords:
         keywords = [content["topic"]]
 
-    subtitles = content.get("subtitle_lines") or []
-    scene_count = min(max(len(keywords), 8), 10)
+    subtitles = content.get("subtitle_lines") or split_sentences(content["voiceover_script"])
+    subtitles = subtitles[:10]
+    if len(subtitles) < 8:
+        subtitles = subtitles + [content["hook"]] * (8 - len(subtitles))
+
+    scene_count = min(max(len(subtitles), len(keywords), 8), 10)
     scene_keywords = (keywords * scene_count)[:scene_count]
-    scene_durations = build_scene_durations(target_duration, scene_count)
+    subtitles = (subtitles * scene_count)[:scene_count]
+    scene_durations = build_scene_durations(target_duration, subtitles)
 
     downloaded = []
     clips = []
