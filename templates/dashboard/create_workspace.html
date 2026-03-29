@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Create Workspace{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 720px; margin: 0 auto;">
+    <h1>Create your workspace</h1>
+    <p class="muted">This is the home for one brand or client account.</p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Create workspace</button>
+    </form>
+</div>
+{% endblock %}

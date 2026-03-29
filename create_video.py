@@ -2,15 +2,11 @@ import json
 import os
 import random
 import textwrap
-<<<<<<< HEAD
-import json
-=======
 from io import BytesIO
 
 import numpy as np
 import requests
 from gtts import gTTS
->>>>>>> production
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.audio.AudioClip import AudioArrayClip
 from moviepy.editor import (
@@ -129,64 +125,10 @@ def create_text_frame(
     return np.array(img)
 
 
-<<<<<<< HEAD
-def build_video_prompt(title, points, image_keyword, video_prompt=None):
-    if video_prompt and video_prompt.strip():
-        return video_prompt.strip()
-
-    points_text = ", ".join(points[:5])
-    return (
-        f"Create a cinematic vertical 9:16 short video about '{title}'. "
-        f"Use {image_keyword} inspired environments and visuals. "
-        f"Show scenes that communicate these beats: {points_text}. "
-        f"Fast pacing, strong visual hook, dramatic lighting, smooth camera motion, "
-        f"modern AI-tech mood, realistic detail, no text overlays, no watermarks."
-    )
-
-
-def save_video_assets(output_dir, title, points, image_keyword, video_prompt):
-    os.makedirs(output_dir, exist_ok=True)
-
-    prompt_path = os.path.join(output_dir, "reel_video_prompt.txt")
-    with open(prompt_path, "w", encoding="utf-8") as f:
-        f.write(video_prompt + "\n")
-
-    metadata_path = os.path.join(output_dir, "reel_video_metadata.json")
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "title": title,
-                "points": points,
-                "image_keyword": image_keyword,
-                "video_prompt": video_prompt,
-            },
-            f,
-            indent=2,
-        )
-
-    return prompt_path, metadata_path
-
-
-def create_reel_video(title, points, image_keyword, video_prompt=None):
-    output_dir = os.path.join(os.getcwd(), "output")
-    video_prompt = build_video_prompt(title, points, image_keyword, video_prompt)
-    prompt_path, metadata_path = save_video_assets(
-        output_dir, title, points, image_keyword, video_prompt
-    )
-
-    print("🎥 AI video prompt ready:")
-    print(video_prompt)
-    print(f"📝 Saved prompt: {prompt_path}")
-    print(f"🗂️ Saved metadata: {metadata_path}")
-
-    print("🖼️  Fetching background image...")
-    bg_img = fetch_background_image(image_keyword)
-=======
 def create_subtitle_overlay(text, duration, size=(1080, 1920)):
     width, height = size
     canvas = Image.new("RGBA", size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(canvas)
->>>>>>> production
 
     try:
         font = ImageFont.truetype(
@@ -389,10 +331,6 @@ def create_stock_video_reel(content, output_dir):
     mixed_audio = CompositeAudioClip([music, voiceover]).set_duration(target_duration)
     final_video = final_video.set_audio(mixed_audio)
 
-<<<<<<< HEAD
-    # Export
-=======
->>>>>>> production
     output_path = os.path.join(output_dir, "reel_video.mp4")
     final_video.write_videofile(
         output_path,
@@ -403,8 +341,6 @@ def create_stock_video_reel(content, output_dir):
         remove_temp=True,
         logger=None,
     )
-<<<<<<< HEAD
-=======
 
     for clip in clips:
         clip.close()
@@ -567,6 +503,5 @@ def create_reel_video(
         print("🎞️ Falling back to slideshow reel...")
         output_path = create_slideshow_reel(content, output_dir)
 
->>>>>>> production
     print(f"✅ Video created: {output_path}")
     return output_path, prompt_path, metadata_path

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Choose Facebook Page{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 800px; margin: 0 auto;">
+    <h1>Choose a Facebook Page</h1>
+    <p class="muted">This Facebook account manages multiple Pages. Pick the one you want to connect to {{ workspace.name }}.</p>
+    <form method="post" action="{% url 'dashboard:select_facebook_page' %}">
+        {% csrf_token %}
+        <label for="page_id">Page</label>
+        <select id="page_id" name="page_id">
+            {% for page in pages %}
+            <option value="{{ page.id }}">{{ page.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" style="margin-top: 16px;">Connect selected page</button>
+    </form>
+</div>
+{% endblock %}

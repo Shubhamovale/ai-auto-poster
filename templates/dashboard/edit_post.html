@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Post{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 800px; margin: 0 auto;">
+    <h1>Edit post</h1>
+    <p class="muted">Status: {{ post.get_status_display }}</p>
+    {% if post.error_message %}
+        <p class="muted">Last error: {{ post.error_message }}</p>
+    {% endif %}
+    <div class="actions" style="margin-bottom: 16px;">
+        <form method="post" action="{% url 'dashboard:publish_now' post.id %}">
+            {% csrf_token %}
+            <button type="submit">Publish now</button>
+        </form>
+    </div>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Save changes</button>
+    </form>
+</div>
+{% if runs %}
+<div class="panel" style="max-width: 800px; margin: 20px auto 0;">
+    <h2>Run history</h2>
+    <table>
+        <tr><th>Platform</th><th>Status</th><th>Started</th><th>Error</th></tr>
+        {% for run in runs %}
+        <tr>
+            <td>{{ run.platform }}</td>
+            <td>{{ run.status }}</td>
+            <td>{{ run.started_at|date:"M j, Y H:i" }}</td>
+            <td>{{ run.error_message|default:"-" }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,14 +1,12 @@
-
 client_secret*.json
-
 get_youtube_token.py
-<<<<<<< HEAD
-output/
-=======
-<<<<<<< Updated upstream
-=======
 __pycache__/
 *.pyc
 output/
->>>>>>> Stashed changes
->>>>>>> production
+db.sqlite3
+.env
+media/
+staticfiles/
+celerybeat-schedule
+.pytest_cache/
+.ruff_cache/

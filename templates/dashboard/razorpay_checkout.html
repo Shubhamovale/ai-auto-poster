@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Razorpay Checkout{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 720px; margin: 0 auto;">
+    <h1>Complete your subscription</h1>
+    <p class="muted">Workspace: {{ workspace.name }}</p>
+    <p class="muted">Plan: {{ plan.name }}</p>
+    <button id="razorpay-checkout-button">Open Razorpay Checkout</button>
+</div>
+
+<form id="razorpay-success-form" method="post" action="{{ callback_url }}" style="display:none;">
+    {% csrf_token %}
+    <input type="hidden" name="razorpay_payment_id" id="razorpay_payment_id">
+    <input type="hidden" name="razorpay_subscription_id" id="razorpay_subscription_id">
+    <input type="hidden" name="razorpay_signature" id="razorpay_signature">
+</form>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+    const options = {
+        key: "{{ razorpay_key_id }}",
+        subscription_id: "{{ subscription.razorpay_subscription_id }}",
+        name: "AI Auto Poster",
+        description: "{{ plan.name }} plan subscription",
+        handler: function (response) {
+            document.getElementById("razorpay_payment_id").value = response.razorpay_payment_id;
+            document.getElementById("razorpay_subscription_id").value = response.razorpay_subscription_id;
+            document.getElementById("razorpay_signature").value = response.razorpay_signature;
+            document.getElementById("razorpay-success-form").submit();
+        },
+        notes: {
+            workspace: "{{ workspace.slug }}"
+        },
+        theme: {
+            color: "#c85a32"
+        }
+    };
+
+    const razorpay = new Razorpay(options);
+    document.getElementById("razorpay-checkout-button").addEventListener("click", function (event) {
+        razorpay.open();
+        event.preventDefault();
+    });
+    razorpay.open();
+</script>
+{% endblock %}

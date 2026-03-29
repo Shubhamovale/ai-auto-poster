@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<section class="grid two">
+    <div class="panel">
+        <div class="muted">Workspace</div>
+        <h1>{{ workspace.name }}</h1>
+        <p>{{ workspace.brand_voice|default:"Set a brand voice to guide AI content generation." }}</p>
+        <div class="actions">
+            <a class="button" href="{% url 'dashboard:create_post' %}">New Post</a>
+            <a class="button secondary" href="{% url 'dashboard:connect_account' %}">Connect Account</a>
+            <a class="button secondary" href="{% url 'dashboard:start_facebook_oauth' %}">Connect Facebook</a>
+            <a class="button secondary" href="{% url 'dashboard:start_youtube_oauth' %}">Connect YouTube</a>
+        </div>
+    </div>
+    <div class="panel">
+        <div class="muted">Current plan</div>
+        <h2>{{ subscription.plan.name }}</h2>
+        <p>{{ usage.posts_used }} / {{ subscription.plan.monthly_post_limit }} posts used this month.</p>
+        <p>{{ usage.ai_generations_used }} AI generations used this month.</p>
+        <table>
+            <tr><th>Plan</th><th>Price</th><th>Limit</th><th>Action</th></tr>
+            {% for plan in plans %}
+            <tr>
+                <td>{{ plan.name }}</td>
+                <td>Rs {{ plan.monthly_price }}</td>
+                <td>{% if plan.monthly_post_limit > 99999 %}Unlimited{% else %}{{ plan.monthly_post_limit }}{% endif %}</td>
+                <td>
+                    {% if subscription.plan_id == plan.id %}
+                        Current
+                    {% else %}
+                        {% if plan.code == 'free' %}
+                            <a href="{% url 'dashboard:change_plan' plan.code %}">Choose</a>
+                        {% else %}
+                            <a href="{% url 'dashboard:subscribe_plan' plan.code %}">Subscribe</a>
+                        {% endif %}
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</section>
+
+<section class="grid two" style="margin-top: 20px;">
+    <div class="panel">
+        <h2>Connected accounts</h2>
+        {% if social_accounts %}
+            <table>
+                <tr><th>Platform</th><th>Name</th><th>Status</th><th>Action</th></tr>
+                {% for account in social_accounts %}
+                <tr>
+                    <td>{{ account.get_platform_display }}</td>
+                    <td>{{ account.account_name }}</td>
+                    <td>{% if account.is_connected %}Connected{% else %}Pending{% endif %}</td>
+                    <td>
+                        <a href="{% url 'dashboard:edit_account' account.id %}">Edit</a>
+                        <form method="post" action="{% url 'dashboard:disconnect_account' account.id %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="button secondary" style="padding: 6px 10px;">Disconnect</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+        {% else %}
+            <p class="muted">No accounts connected yet.</p>
+        {% endif %}
+    </div>
+    <div class="panel">
+        <h2>Recent posts</h2>
+        {% if posts %}
+            <table>
+                <tr><th>Title</th><th>Status</th><th>When</th><th>Action</th></tr>
+                {% for post in posts %}
+                <tr>
+                    <td><a href="{% url 'dashboard:edit_post' post.id %}">{{ post.title }}</a></td>
+                    <td>{{ post.get_status_display }}</td>
+                    <td>{{ post.scheduled_for|date:"M j, Y H:i" }}</td>
+                    <td><a href="{% url 'dashboard:edit_post' post.id %}">Open</a></td>
+                </tr>
+                {% endfor %}
+            </table>
+        {% else %}
+            <p class="muted">Your scheduled posts will show up here.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

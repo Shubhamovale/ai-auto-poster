@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}AI Auto Poster{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="muted">Auto-post AI content to Facebook, Instagram and YouTube with one workflow.</div>
+    <h1>Daily social posting for busy teams.</h1>
+    <p>
+        Generate ideas with AI, turn them into short-form video drafts, connect your channels,
+        and schedule content from one workspace. Built for agencies, local businesses, and founders
+        who want consistency without hiring a full content team.
+    </p>
+    <div class="actions">
+        <a class="button" href="{% url 'signup' %}">Start Free</a>
+        <a class="button secondary" href="{% url 'login' %}">See Dashboard</a>
+    </div>
+</section>
+
+<section class="grid two">
+    <div class="panel">
+        <h2>What you get</h2>
+        <div class="feature-list">
+            <div class="feature-item">Multi-user workspace with per-brand settings</div>
+            <div class="feature-item">Facebook and YouTube publishing hooks with reusable service layer</div>
+            <div class="feature-item">AI-generated titles, captions, prompts and short video payloads</div>
+            <div class="feature-item">Subscription-ready plans for Free, Basic and Pro</div>
+        </div>
+    </div>
+    <div class="panel">
+        <h2>Launch pricing</h2>
+        <table>
+            <tr><th>Plan</th><th>Posts / mo</th><th>Price</th></tr>
+            <tr><td>Free</td><td>5</td><td>Rs 0</td></tr>
+            <tr><td>Basic</td><td>30</td><td>Rs 499</td></tr>
+            <tr><td>Pro</td><td>Unlimited</td><td>Rs 999</td></tr>
+        </table>
+    </div>
+</section>
+{% endblock %}

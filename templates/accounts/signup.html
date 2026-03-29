@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Create Account{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 620px; margin: 0 auto;">
+    <h1>Create your account</h1>
+    <p class="muted">We will create your login first, then your workspace.</p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Create account</button>
+    </form>
+</div>
+{% endblock %}
