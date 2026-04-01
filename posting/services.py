@@ -2,6 +2,7 @@ from django.utils import timezone
 
 from create_video import create_reel_video
 from post_facebook import post_to_facebook
+from post_linkedin import post_to_linkedin
 from post_youtube import post_to_youtube
 from social_accounts.models import SocialAccount
 from social_accounts.services import get_connected_account
@@ -29,7 +30,8 @@ def build_video_for_post(post: Post):
 
 
 def publish_post(post: Post):
-    if not post.video_path:
+    needs_video = any(platform in {"facebook", "youtube"} for platform in post.platforms)
+    if needs_video and not post.video_path:
         build_video_for_post(post)
 
     post.status = Post.Status.PROCESSING
@@ -60,6 +62,14 @@ def publish_post(post: Post):
                     client_secret=getattr(social_account, "client_secret", None),
                     refresh_token=getattr(social_account, "refresh_token", None),
                     token_uri=getattr(social_account, "token_uri", None),
+                )
+            elif platform == "linkedin":
+                social_account = get_connected_account(post.workspace, SocialAccount.Platform.LINKEDIN)
+                author_urn = getattr(social_account, "metadata", {}).get("author_urn", "")
+                response = post_to_linkedin(
+                    post.caption,
+                    access_token=getattr(social_account, "access_token", None),
+                    author_urn=author_urn,
                 )
             else:
                 response = {"detail": "Instagram publishing not wired yet."}

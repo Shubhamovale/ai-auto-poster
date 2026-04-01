@@ -8,6 +8,7 @@ class PostForm(forms.ModelForm):
         choices=[
             ("facebook", "Facebook"),
             ("instagram", "Instagram"),
+            ("linkedin", "LinkedIn"),
             ("youtube", "YouTube"),
         ],
         widget=forms.CheckboxSelectMultiple,

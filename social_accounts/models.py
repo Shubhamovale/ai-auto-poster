@@ -7,6 +7,7 @@ class SocialAccount(models.Model):
     class Platform(models.TextChoices):
         FACEBOOK = "facebook", "Facebook"
         INSTAGRAM = "instagram", "Instagram"
+        LINKEDIN = "linkedin", "LinkedIn"
         YOUTUBE = "youtube", "YouTube"
 
     workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="social_accounts")

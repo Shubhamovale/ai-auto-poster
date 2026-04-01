@@ -27,12 +27,12 @@ services:
     env_file:
       - .env
     environment:
-      DB_ENGINE: django.db.backends.postgresql
-      DB_NAME: ${POSTGRES_DB:-ai_auto_poster}
-      DB_USER: ${POSTGRES_USER:-ai_auto_poster}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
-      DB_HOST: db
-      DB_PORT: 5432
+      DB_ENGINE: ${DB_ENGINE:-django.db.backends.postgresql}
+      DB_NAME: ${DB_NAME:-${POSTGRES_DB:-ai_auto_poster}}
+      DB_USER: ${DB_USER:-${POSTGRES_USER:-ai_auto_poster}}
+      DB_PASSWORD: ${DB_PASSWORD:-${POSTGRES_PASSWORD:-change-me}}
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-5432}
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
@@ -52,12 +52,12 @@ services:
     env_file:
       - .env
     environment:
-      DB_ENGINE: django.db.backends.postgresql
-      DB_NAME: ${POSTGRES_DB:-ai_auto_poster}
-      DB_USER: ${POSTGRES_USER:-ai_auto_poster}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
-      DB_HOST: db
-      DB_PORT: 5432
+      DB_ENGINE: ${DB_ENGINE:-django.db.backends.postgresql}
+      DB_NAME: ${DB_NAME:-${POSTGRES_DB:-ai_auto_poster}}
+      DB_USER: ${DB_USER:-${POSTGRES_USER:-ai_auto_poster}}
+      DB_PASSWORD: ${DB_PASSWORD:-${POSTGRES_PASSWORD:-change-me}}
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-5432}
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
@@ -75,12 +75,12 @@ services:
     env_file:
       - .env
     environment:
-      DB_ENGINE: django.db.backends.postgresql
-      DB_NAME: ${POSTGRES_DB:-ai_auto_poster}
-      DB_USER: ${POSTGRES_USER:-ai_auto_poster}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
-      DB_HOST: db
-      DB_PORT: 5432
+      DB_ENGINE: ${DB_ENGINE:-django.db.backends.postgresql}
+      DB_NAME: ${DB_NAME:-${POSTGRES_DB:-ai_auto_poster}}
+      DB_USER: ${DB_USER:-${POSTGRES_USER:-ai_auto_poster}}
+      DB_PASSWORD: ${DB_PASSWORD:-${POSTGRES_PASSWORD:-change-me}}
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-5432}
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0

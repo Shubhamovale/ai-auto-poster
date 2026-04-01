@@ -1,5 +1,7 @@
 import secrets
 import json
+import base64
+from datetime import timedelta
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -47,6 +49,7 @@ YOUTUBE_SCOPES = [
     "https://www.googleapis.com/auth/youtube",
 ]
 FACEBOOK_SCOPES = ["pages_show_list", "pages_manage_posts"]
+LINKEDIN_SCOPES = ["openid", "profile", "email", "w_member_social"]
 
 
 class LandingPageView(TemplateView):
@@ -237,6 +240,23 @@ def _facebook_redirect_uri(request):
     return request.build_absolute_uri(reverse("dashboard:facebook_oauth_callback"))
 
 
+def _linkedin_redirect_uri(request):
+    if settings.LINKEDIN_OAUTH_REDIRECT_URI:
+        return settings.LINKEDIN_OAUTH_REDIRECT_URI
+    return request.build_absolute_uri(reverse("dashboard:linkedin_oauth_callback"))
+
+
+def _decode_jwt_payload(token):
+    if not token or token.count(".") < 2:
+        return {}
+    payload = token.split(".")[1]
+    payload += "=" * (-len(payload) % 4)
+    try:
+        return json.loads(base64.urlsafe_b64decode(payload.encode("utf-8")).decode("utf-8"))
+    except Exception:
+        return {}
+
+
 @login_required
 def start_youtube_oauth(request):
     workspace = get_object_or_404(Workspace, owner=request.user)
@@ -283,6 +303,31 @@ def start_facebook_oauth(request):
     }
     query = "&".join(f"{key}={requests.utils.quote(str(value), safe='')}" for key, value in params.items())
     return redirect(f"https://www.facebook.com/v22.0/dialog/oauth?{query}")
+
+
+@login_required
+def start_linkedin_oauth(request):
+    workspace = get_object_or_404(Workspace, owner=request.user)
+    if not settings.LINKEDIN_OAUTH_CLIENT_ID or not settings.LINKEDIN_OAUTH_CLIENT_SECRET:
+        messages.error(
+            request,
+            "Missing LinkedIn OAuth settings. Set LINKEDIN_OAUTH_CLIENT_ID and LINKEDIN_OAUTH_CLIENT_SECRET.",
+        )
+        return redirect("dashboard:home")
+
+    state = secrets.token_urlsafe(24)
+    request.session["linkedin_oauth_state"] = state
+    request.session["linkedin_oauth_workspace_id"] = workspace.id
+
+    params = {
+        "response_type": "code",
+        "client_id": settings.LINKEDIN_OAUTH_CLIENT_ID,
+        "redirect_uri": _linkedin_redirect_uri(request),
+        "state": state,
+        "scope": " ".join(LINKEDIN_SCOPES),
+    }
+    query = "&".join(f"{key}={requests.utils.quote(str(value), safe='')}" for key, value in params.items())
+    return redirect(f"https://www.linkedin.com/oauth/v2/authorization?{query}")
 
 
 @login_required
@@ -358,6 +403,95 @@ def _store_facebook_page(workspace, page, user_access_token):
             "is_connected": True,
         },
     )
+
+
+@login_required
+def linkedin_oauth_callback(request):
+    workspace_id = request.session.get("linkedin_oauth_workspace_id")
+    expected_state = request.session.get("linkedin_oauth_state")
+    workspace = get_object_or_404(Workspace, owner=request.user, pk=workspace_id)
+
+    if not expected_state:
+        messages.error(request, "Missing LinkedIn OAuth state. Start the connection again.")
+        return redirect("dashboard:home")
+    if request.GET.get("state") != expected_state:
+        messages.error(request, "LinkedIn OAuth state mismatch. Start the connection again.")
+        return redirect("dashboard:home")
+    if request.GET.get("error"):
+        messages.error(
+            request,
+            f"LinkedIn connection failed: {request.GET.get('error_description', request.GET['error'])}",
+        )
+        return redirect("dashboard:home")
+
+    try:
+        token_response = requests.post(
+            "https://www.linkedin.com/oauth/v2/accessToken",
+            data={
+                "grant_type": "authorization_code",
+                "code": request.GET["code"],
+                "client_id": settings.LINKEDIN_OAUTH_CLIENT_ID,
+                "client_secret": settings.LINKEDIN_OAUTH_CLIENT_SECRET,
+                "redirect_uri": _linkedin_redirect_uri(request),
+            },
+            timeout=30,
+        )
+        token_response.raise_for_status()
+        token_payload = token_response.json()
+        access_token = token_payload["access_token"]
+        expires_in = token_payload.get("expires_in")
+        id_token_payload = _decode_jwt_payload(token_payload.get("id_token", ""))
+
+        userinfo_response = requests.get(
+            "https://api.linkedin.com/v2/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=20,
+        )
+        userinfo_response.raise_for_status()
+        userinfo = userinfo_response.json()
+
+        member_id = userinfo.get("sub") or id_token_payload.get("sub")
+        if not member_id:
+            raise RuntimeError("LinkedIn did not return a member identifier.")
+
+        account_name = (
+            userinfo.get("name")
+            or " ".join(filter(None, [userinfo.get("given_name"), userinfo.get("family_name")])).strip()
+            or workspace.owner.get_username()
+        )
+        author_urn = f"urn:li:person:{member_id}"
+        token_expires_at = timezone.now() + timedelta(seconds=int(expires_in or 0)) if expires_in else None
+
+        SocialAccount.objects.update_or_create(
+            workspace=workspace,
+            platform=SocialAccount.Platform.LINKEDIN,
+            account_identifier=member_id,
+            defaults={
+                "account_name": account_name,
+                "client_id": settings.LINKEDIN_OAUTH_CLIENT_ID,
+                "client_secret": settings.LINKEDIN_OAUTH_CLIENT_SECRET,
+                "token_uri": "https://www.linkedin.com/oauth/v2/accessToken",
+                "access_token": access_token,
+                "refresh_token": token_payload.get("refresh_token", ""),
+                "token_expires_at": token_expires_at,
+                "is_connected": True,
+                "metadata": {
+                    "author_urn": author_urn,
+                    "member_id": member_id,
+                    "email": userinfo.get("email", ""),
+                    "name": account_name,
+                    "scope": token_payload.get("scope", ""),
+                },
+            },
+        )
+        messages.success(request, "LinkedIn account connected successfully.")
+    except Exception as exc:
+        messages.error(request, f"LinkedIn connection failed: {exc}")
+    finally:
+        request.session.pop("linkedin_oauth_state", None)
+        request.session.pop("linkedin_oauth_workspace_id", None)
+
+    return redirect("dashboard:home")
 
 
 @login_required

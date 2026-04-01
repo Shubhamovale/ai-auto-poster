@@ -111,6 +111,10 @@ Database and async:
 
 - `DB_ENGINE`
 - `DB_NAME`
+- `DB_USER`
+- `DB_PASSWORD`
+- `DB_HOST`
+- `DB_PORT`
 - `REDIS_URL`
 - `CELERY_BROKER_URL`
 - `CELERY_RESULT_BACKEND`
@@ -229,6 +233,31 @@ REDIS_URL=redis://your-redis-host:6379/0
 CELERY_BROKER_URL=redis://your-redis-host:6379/0
 CELERY_RESULT_BACKEND=redis://your-redis-host:6379/0
 ```
+
+## AWS RDS PostgreSQL
+
+To move production from the bundled PostgreSQL container to AWS RDS:
+
+1. Create an RDS PostgreSQL instance in the same VPC as EC2.
+2. Allow inbound port `5432` from the EC2 security group.
+3. Update `.env` on EC2:
+
+```env
+DB_ENGINE=django.db.backends.postgresql
+DB_NAME=your_rds_db_name
+DB_USER=your_rds_username
+DB_PASSWORD=your_rds_password
+DB_HOST=your-rds-endpoint.region.rds.amazonaws.com
+DB_PORT=5432
+```
+
+4. Restart the app stack:
+
+```bash
+docker compose -f docker-compose.prod.yml up --build -d
+```
+
+The production compose file now honors the `DB_*` values from `.env`, so the web, worker, and beat services can point to RDS directly.
 
 ## Razorpay subscriptions
 

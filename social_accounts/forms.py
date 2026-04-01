@@ -34,4 +34,6 @@ class SocialAccountForm(forms.ModelForm):
             for field in ("client_id", "client_secret", "refresh_token"):
                 if not cleaned_data.get(field):
                     self.add_error(field, "This field is required for YouTube publishing.")
+        if platform == SocialAccount.Platform.LINKEDIN and not cleaned_data.get("access_token"):
+            self.add_error("access_token", "LinkedIn publishing requires an access token.")
         return cleaned_data

@@ -3,46 +3,96 @@
 {% block title %}Connect Account{% endblock %}
 
 {% block content %}
-<div class="panel" style="max-width: 800px; margin: 0 auto;">
-    <h1>{% if editing %}Edit social account{% else %}Connect a social account{% endif %}</h1>
-    {% if editing %}
-    <p class="muted">Update the saved credentials for this connected account.</p>
-    {% else %}
-    <p class="muted">The easiest path is to connect your channels with a normal login. The app will save the IDs and tokens automatically.</p>
-    <div class="grid two" style="margin: 20px 0;">
-        <div class="feature-item">
-            <h2 style="margin-top: 0;">Connect Facebook</h2>
-            <p class="muted">Sign in with Facebook, choose your page, and let the app store the page ID and access token automatically.</p>
-            <a class="button" href="{% url 'dashboard:start_facebook_oauth' %}">Connect Facebook</a>
-        </div>
-        <div class="feature-item">
-            <h2 style="margin-top: 0;">Connect YouTube</h2>
-            <p class="muted">Sign in with Google and connect your channel without copying refresh tokens by hand.</p>
-            <a class="button" href="{% url 'dashboard:start_youtube_oauth' %}">Connect YouTube</a>
-        </div>
-    </div>
-    {% endif %}
+<style>
+    .connect-shell {
+        display: grid;
+        gap: 18px;
+    }
+    .connect-grid {
+        margin: 20px 0;
+    }
+    .connect-card {
+        padding: 26px;
+        border-radius: 28px;
+        background:
+            linear-gradient(180deg, rgba(18, 29, 52, 0.92), rgba(13, 22, 42, 0.94));
+        border: 1px solid rgba(126, 156, 255, 0.16);
+        box-shadow: 0 20px 34px rgba(5, 11, 24, 0.2);
+    }
+    .connect-card h2 {
+        margin: 0 0 12px;
+        color: #f7f9ff;
+    }
+    .connect-card .muted {
+        color: #b2bdd9;
+        margin-bottom: 18px;
+    }
+    .advanced-panel {
+        padding: 18px;
+        margin-top: 16px;
+        background: rgba(10, 18, 34, 0.72);
+        border: 1px solid rgba(126, 156, 255, 0.14);
+    }
+    .advanced-details {
+        margin-top: 18px;
+    }
+    .advanced-summary {
+        cursor: pointer;
+        font-weight: bold;
+        color: #f4f7ff;
+    }
+    .advanced-body {
+        margin-top: 16px;
+    }
+</style>
 
-    {% if editing or show_advanced_setup %}
-    <div class="panel" style="padding: 18px; margin-top: 16px;">
-        <h2 style="margin-top: 0;">{% if editing %}Manual account details{% else %}Advanced setup{% endif %}</h2>
-        <p class="muted">Use this only if you need to enter tokens manually or update a saved account directly.</p>
-        <form method="post">
-            {% csrf_token %}
-            {{ form.as_p }}
-            <button type="submit">{% if editing %}Update social account{% else %}Save social account{% endif %}</button>
-        </form>
-    </div>
-    {% elif not editing %}
-    <div style="margin-top: 18px;">
-        <details>
-            <summary style="cursor: pointer; font-weight: bold;">Advanced setup</summary>
-            <div style="margin-top: 16px;">
-                <p class="muted">Need manual token entry? Open the advanced form.</p>
-                <a class="button secondary" href="{% url 'dashboard:connect_account' %}?advanced=1">Open advanced setup</a>
+<div class="panel" style="max-width: 800px; margin: 0 auto;">
+    <div class="connect-shell">
+        <h1>{% if editing %}Edit social account{% else %}Connect a social account{% endif %}</h1>
+        {% if editing %}
+        <p class="muted">Update the saved credentials for this connected account.</p>
+        {% else %}
+        <p class="muted">The easiest path is to connect your channels with a normal login. The app will save the IDs and tokens automatically.</p>
+        <div class="grid two connect-grid">
+            <div class="connect-card">
+                <h2>Connect Facebook</h2>
+                <p class="muted">Sign in with Facebook, choose your page, and let the app store the page ID and access token automatically.</p>
+                <a class="button" href="{% url 'dashboard:start_facebook_oauth' %}">Connect Facebook</a>
             </div>
-        </details>
+            <div class="connect-card">
+                <h2>Connect LinkedIn</h2>
+                <p class="muted">Sign in with LinkedIn, approve posting access, and let the app save your member token for future posts.</p>
+                <a class="button" href="{% url 'dashboard:start_linkedin_oauth' %}">Connect LinkedIn</a>
+            </div>
+            <div class="connect-card">
+                <h2>Connect YouTube</h2>
+                <p class="muted">Sign in with Google and connect your channel without copying refresh tokens by hand.</p>
+                <a class="button" href="{% url 'dashboard:start_youtube_oauth' %}">Connect YouTube</a>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if editing or show_advanced_setup %}
+        <div class="panel advanced-panel">
+            <h2 style="margin-top: 0;">{% if editing %}Manual account details{% else %}Advanced setup{% endif %}</h2>
+            <p class="muted">Use this only if you need to enter tokens manually or update a saved account directly.</p>
+            <form method="post">
+                {% csrf_token %}
+                {{ form.as_p }}
+                <button type="submit">{% if editing %}Update social account{% else %}Save social account{% endif %}</button>
+            </form>
+        </div>
+        {% elif not editing %}
+        <div class="advanced-details">
+            <details>
+                <summary class="advanced-summary">Advanced setup</summary>
+                <div class="advanced-body">
+                    <p class="muted">Need manual token entry? Open the advanced form.</p>
+                    <a class="button secondary" href="{% url 'dashboard:connect_account' %}?advanced=1">Open advanced setup</a>
+                </div>
+            </details>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 {% endblock %}
