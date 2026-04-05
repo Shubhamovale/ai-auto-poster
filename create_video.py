@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import random
@@ -7,6 +8,7 @@ from io import BytesIO
 
 import numpy as np
 import requests
+import edge_tts
 from gtts import gTTS
 from huggingface_hub import InferenceClient
 from PIL import Image, ImageDraw, ImageFont
@@ -380,9 +382,26 @@ def download_file(url, path):
     return path
 
 
-def create_voiceover(script, output_path):
-    gTTS(text=script, lang="en", slow=False).save(output_path)
+def create_edge_voiceover(script, output_path):
+    voice = os.environ.get("EDGE_TTS_VOICE", "en-US-AvaNeural")
+    rate = os.environ.get("EDGE_TTS_RATE", "+0%")
+
+    async def _synthesize():
+        communicate = edge_tts.Communicate(script, voice=voice, rate=rate)
+        await communicate.save(output_path)
+
+    asyncio.run(_synthesize())
     return output_path
+
+
+def create_voiceover(script, output_path):
+    try:
+        print("Using Edge TTS voiceover...")
+        return create_edge_voiceover(script, output_path)
+    except Exception as exc:
+        print(f"Edge TTS voiceover failed: {exc}. Falling back to gTTS.")
+        gTTS(text=script, lang="en", slow=False).save(output_path)
+        return output_path
 
 
 def fit_vertical_clip(clip, duration):

@@ -3,6 +3,7 @@ Django>=5.1,<6.0
 django-crispy-forms
 crispy-tailwind
 celery[redis]
+edge-tts
 gunicorn
 google-api-python-client
 google-auth
