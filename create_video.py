@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 import random
@@ -8,8 +7,6 @@ from io import BytesIO
 
 import numpy as np
 import requests
-import edge_tts
-from gtts import gTTS
 from google.cloud import texttospeech
 from google.oauth2 import service_account
 from huggingface_hub import InferenceClient
@@ -384,18 +381,6 @@ def download_file(url, path):
     return path
 
 
-def create_edge_voiceover(script, output_path):
-    voice = os.environ.get("EDGE_TTS_VOICE", "en-US-AvaNeural")
-    rate = os.environ.get("EDGE_TTS_RATE", "+0%")
-
-    async def _synthesize():
-        communicate = edge_tts.Communicate(script, voice=voice, rate=rate)
-        await communicate.save(output_path)
-
-    asyncio.run(_synthesize())
-    return output_path
-
-
 def has_google_tts_access():
     return bool(
         os.environ.get("GOOGLE_CLOUD_TTS_SERVICE_ACCOUNT_JSON")
@@ -435,20 +420,13 @@ def create_google_voiceover(script, output_path):
 
 
 def create_voiceover(script, output_path):
-    try:
-        if has_google_tts_access():
-            print("Using Google Cloud TTS voiceover...")
-            return create_google_voiceover(script, output_path)
-        print("Using Edge TTS voiceover...")
-        return create_edge_voiceover(script, output_path)
-    except Exception as exc:
-        print(f"Primary voiceover failed: {exc}. Falling back to Edge TTS / gTTS.")
-        try:
-            return create_edge_voiceover(script, output_path)
-        except Exception as edge_exc:
-            print(f"Edge TTS voiceover failed: {edge_exc}. Falling back to gTTS.")
-        gTTS(text=script, lang="en", slow=False).save(output_path)
-        return output_path
+    if not has_google_tts_access():
+        raise RuntimeError(
+            "Google Cloud TTS is not configured. Set GOOGLE_CLOUD_TTS_SERVICE_ACCOUNT_JSON "
+            "or GOOGLE_APPLICATION_CREDENTIALS."
+        )
+    print("Using Google Cloud TTS voiceover...")
+    return create_google_voiceover(script, output_path)
 
 
 def fit_vertical_clip(clip, duration):

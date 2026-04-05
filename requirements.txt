@@ -3,14 +3,12 @@ Django>=5.1,<6.0
 django-crispy-forms
 crispy-tailwind
 celery[redis]
-edge-tts
 gunicorn
 google-cloud-texttospeech
 google-api-python-client
 google-auth
 google-auth-oauthlib
 google-genai
-gTTS
 huggingface_hub
 imageio
 imageio-ffmpeg
