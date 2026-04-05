@@ -10,6 +10,8 @@ import numpy as np
 import requests
 import edge_tts
 from gtts import gTTS
+from google.cloud import texttospeech
+from google.oauth2 import service_account
 from huggingface_hub import InferenceClient
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.audio.AudioClip import AudioArrayClip
@@ -394,12 +396,57 @@ def create_edge_voiceover(script, output_path):
     return output_path
 
 
+def has_google_tts_access():
+    return bool(
+        os.environ.get("GOOGLE_CLOUD_TTS_SERVICE_ACCOUNT_JSON")
+        or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    )
+
+
+def _google_tts_client():
+    service_account_json = os.environ.get("GOOGLE_CLOUD_TTS_SERVICE_ACCOUNT_JSON")
+    if service_account_json:
+        credentials_info = json.loads(service_account_json)
+        credentials = service_account.Credentials.from_service_account_info(credentials_info)
+        return texttospeech.TextToSpeechClient(credentials=credentials)
+    return texttospeech.TextToSpeechClient()
+
+
+def create_google_voiceover(script, output_path):
+    client = _google_tts_client()
+    synthesis_input = texttospeech.SynthesisInput(text=script)
+    voice = texttospeech.VoiceSelectionParams(
+        language_code=os.environ.get("GOOGLE_TTS_LANGUAGE_CODE", "en-US"),
+        name=os.environ.get("GOOGLE_TTS_VOICE_NAME", "en-US-Chirp3-HD-Achernar"),
+    )
+    audio_config = texttospeech.AudioConfig(
+        audio_encoding=texttospeech.AudioEncoding.MP3,
+        speaking_rate=float(os.environ.get("GOOGLE_TTS_SPEAKING_RATE", "1.05")),
+        pitch=float(os.environ.get("GOOGLE_TTS_PITCH", "0.0")),
+    )
+    response = client.synthesize_speech(
+        input=synthesis_input,
+        voice=voice,
+        audio_config=audio_config,
+    )
+    with open(output_path, "wb") as f:
+        f.write(response.audio_content)
+    return output_path
+
+
 def create_voiceover(script, output_path):
     try:
+        if has_google_tts_access():
+            print("Using Google Cloud TTS voiceover...")
+            return create_google_voiceover(script, output_path)
         print("Using Edge TTS voiceover...")
         return create_edge_voiceover(script, output_path)
     except Exception as exc:
-        print(f"Edge TTS voiceover failed: {exc}. Falling back to gTTS.")
+        print(f"Primary voiceover failed: {exc}. Falling back to Edge TTS / gTTS.")
+        try:
+            return create_edge_voiceover(script, output_path)
+        except Exception as edge_exc:
+            print(f"Edge TTS voiceover failed: {edge_exc}. Falling back to gTTS.")
         gTTS(text=script, lang="en", slow=False).save(output_path)
         return output_path
 
