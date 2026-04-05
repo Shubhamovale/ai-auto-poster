@@ -5,7 +5,7 @@ import glob
 files = glob.glob("*.json")
 print("JSON files found:", files)
 
-CLIENT_SECRET_FILE = "client_secret_421948929084.json"  # change after checking above
+CLIENT_SECRET_FILE = "client_secret.json"  # change after checking above
 
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
