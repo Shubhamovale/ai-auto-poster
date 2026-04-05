@@ -1,12 +1,14 @@
 import json
 import os
 import random
+import time
 import textwrap
 from io import BytesIO
 
 import numpy as np
 import requests
 from gtts import gTTS
+from huggingface_hub import InferenceClient
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.audio.AudioClip import AudioArrayClip
 from moviepy.editor import (
@@ -202,6 +204,41 @@ def build_video_prompt(title, points, image_keyword, video_prompt=None):
     )
 
 
+def build_scene_video_prompts(title, points, image_keyword, video_prompt=None):
+    if video_prompt and video_prompt.strip():
+        return [segment.strip() for segment in video_prompt.split("\n\n") if segment.strip()]
+
+    core_points = [point.strip() for point in (points or []) if point.strip()]
+    scene_beats = core_points[:3]
+    if not scene_beats:
+        scene_beats = [
+            f"Introduce the topic {title}",
+            f"Build urgency around {image_keyword}",
+            "End with a strong social-media follow hook",
+        ]
+
+    prompts = []
+    for index, beat in enumerate(scene_beats, start=1):
+        if index == 1:
+            shot_direction = "Open with an attention-grabbing hook in the first second"
+        elif index == len(scene_beats):
+            shot_direction = "End with a payoff moment and clear continuation energy"
+        else:
+            shot_direction = "Escalate the tension and keep the pacing punchy"
+
+        prompts.append(
+            (
+                f"Create scene {index} of a vertical 9:16 social video about '{title}'. "
+                f"Focus on this beat: {beat}. "
+                f"Use {image_keyword} inspired environments, cinematic lighting, fast social-media pacing, "
+                f"subtle camera motion, realistic detail, bold composition, no subtitles, no watermarks. "
+                f"{shot_direction} Keep this clip visually self-contained and suitable for stitching into a short reel."
+            )
+        )
+
+    return prompts
+
+
 def save_video_assets(output_dir, content, video_prompt):
     os.makedirs(output_dir, exist_ok=True)
 
@@ -218,6 +255,16 @@ def save_video_assets(output_dir, content, video_prompt):
     return prompt_path, metadata_path
 
 
+def save_scene_prompts(output_dir, scene_prompts):
+    scene_prompt_path = os.path.join(output_dir, "reel_scene_prompts.txt")
+    with open(scene_prompt_path, "w", encoding="utf-8") as f:
+        for index, prompt in enumerate(scene_prompts, start=1):
+            f.write(f"Scene {index}\n")
+            f.write(prompt)
+            f.write("\n\n")
+    return scene_prompt_path
+
+
 def build_motion_clip(frame, duration, zoom_start=1.0, zoom_end=1.08, fade=0.2):
     clip = ImageClip(frame).set_duration(duration)
     clip = clip.resize(lambda t: zoom_start + (zoom_end - zoom_start) * (t / duration))
@@ -230,25 +277,98 @@ def has_pexels_access():
     return bool(os.environ.get("PEXELS_API_KEY"))
 
 
-def fetch_pexels_video(query):
-    headers = {"Authorization": os.environ["PEXELS_API_KEY"]}
-    response = requests.get(
-        "https://api.pexels.com/videos/search",
+def has_hf_video_access():
+    return bool(os.environ.get("HF_TOKEN"))
+
+
+def has_xai_video_access():
+    return bool(os.environ.get("XAI_API_KEY"))
+
+
+def generate_hf_video(prompt):
+    client = InferenceClient(
+        provider=os.environ.get("HF_VIDEO_PROVIDER", "fal-ai"),
+        api_key=os.environ["HF_TOKEN"],
+    )
+    return client.text_to_video(
+        prompt,
+        model=os.environ.get("HF_VIDEO_MODEL", "Wan-AI/Wan2.2-TI2V-5B"),
+    )
+
+
+def generate_grok_video(prompt, duration=5, aspect_ratio="9:16", resolution="480p"):
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {os.environ['XAI_API_KEY']}",
+    }
+    response = requests.post(
+        "https://api.x.ai/v1/videos/generations",
         headers=headers,
-        params={"query": query, "orientation": "portrait", "per_page": 10},
-        timeout=20,
+        json={
+            "model": os.environ.get("XAI_VIDEO_MODEL", "grok-imagine-video"),
+            "prompt": prompt,
+            "duration": max(1, min(int(duration), 15)),
+            "aspect_ratio": aspect_ratio,
+            "resolution": resolution,
+        },
+        timeout=60,
     )
     response.raise_for_status()
-    videos = response.json().get("videos", [])
-    for video in videos:
-        files = sorted(
-            video.get("video_files", []),
-            key=lambda item: item.get("height", 0) * item.get("width", 0),
-            reverse=True,
+    request_id = response.json()["request_id"]
+
+    timeout_seconds = int(os.environ.get("XAI_VIDEO_TIMEOUT_SECONDS", "900"))
+    interval_seconds = int(os.environ.get("XAI_VIDEO_POLL_SECONDS", "5"))
+    deadline = time.time() + timeout_seconds
+
+    while time.time() < deadline:
+        result = requests.get(
+            f"https://api.x.ai/v1/videos/{request_id}",
+            headers={"Authorization": headers["Authorization"]},
+            timeout=30,
         )
-        for file_info in files:
-            if file_info.get("width", 0) >= 720 and file_info.get("height", 0) >= 1200:
-                return file_info["link"]
+        result.raise_for_status()
+        payload = result.json()
+        status = payload.get("status")
+        if status == "done":
+            video_url = payload.get("video", {}).get("url")
+            if not video_url:
+                raise RuntimeError("xAI video generation completed without a video URL.")
+            return payload
+        if status == "expired":
+            raise RuntimeError("xAI video generation request expired before completion.")
+        if status not in {"pending", "running", "queued"}:
+            raise RuntimeError(f"xAI video generation failed with status: {status}")
+        time.sleep(interval_seconds)
+
+    raise TimeoutError("Timed out waiting for xAI video generation.")
+
+
+def fetch_pexels_video(query):
+    try:
+        api_key = os.environ.get("PEXELS_API_KEY")
+        if not api_key:
+            print("Pexels video fetch skipped: PEXELS_API_KEY is missing.")
+            return None
+        headers = {"Authorization": api_key}
+        response = requests.get(
+            "https://api.pexels.com/videos/search",
+            headers=headers,
+            params={"query": query, "orientation": "portrait", "per_page": 10},
+            timeout=20,
+        )
+        response.raise_for_status()
+        videos = response.json().get("videos", [])
+        for video in videos:
+            files = sorted(
+                video.get("video_files", []),
+                key=lambda item: item.get("height", 0) * item.get("width", 0),
+                reverse=True,
+            )
+            for file_info in files:
+                if file_info.get("width", 0) >= 720 and file_info.get("height", 0) >= 1200:
+                    return file_info["link"]
+    except requests.RequestException as exc:
+        print(f"Pexels video fetch failed for '{query}': {exc}")
     return None
 
 
@@ -351,6 +471,145 @@ def create_stock_video_reel(content, output_dir):
     voiceover.close()
     final_video.close()
 
+    return output_path
+
+
+def create_grok_video_reel(content, output_dir):
+    subtitle_lines = content.get("subtitle_lines") or []
+    voice_path = create_voiceover(
+        content["voiceover_script"],
+        os.path.join(output_dir, "voiceover.mp3"),
+    )
+    voiceover = AudioFileClip(voice_path)
+    target_duration = max(15.0, voiceover.duration + 0.8)
+    scene_durations = build_scene_durations(target_duration, 5)
+    middle_duration = max(4, int(round(sum(scene_durations[1:4]) / 3)))
+    scene_prompts = build_scene_video_prompts(
+        content["title"],
+        content["points"],
+        content["image_keyword"],
+        content.get("video_prompt"),
+    )
+    save_scene_prompts(output_dir, scene_prompts)
+
+    clips = []
+    downloaded = []
+    for index, prompt in enumerate(scene_prompts):
+        print(f"🎬 Generating Grok scene {index + 1}/{len(scene_prompts)}...")
+        generated = generate_grok_video(
+            prompt,
+            duration=middle_duration,
+            aspect_ratio="9:16",
+            resolution=os.environ.get("XAI_VIDEO_RESOLUTION", "480p"),
+        )
+        clip_url = generated["video"]["url"]
+        clip_path = os.path.join(output_dir, f"grok_scene_{index + 1}.mp4")
+        downloaded.append(download_file(clip_url, clip_path))
+
+    per_scene_duration = target_duration / len(downloaded)
+    for index, clip_path in enumerate(downloaded):
+        base_clip = VideoFileClip(clip_path)
+        clip = fit_vertical_clip(base_clip, per_scene_duration)
+        subtitle_clip = create_subtitle_overlay(
+            subtitle_lines[index] if len(subtitle_lines) > index else content["points"][min(index, len(content["points"]) - 1)] if content["points"] else content["title"],
+            per_scene_duration,
+        )
+        clip = CompositeVideoClip([clip, subtitle_clip.set_position(("center", "bottom"))]).set_duration(
+            per_scene_duration
+        )
+        clips.append(clip)
+
+    final_video = concatenate_videoclips(clips, method="compose").set_duration(target_duration)
+    voiceover = voiceover.set_start(0).volumex(1.0)
+    music = create_background_music(target_duration).set_duration(target_duration).volumex(0.22)
+    mixed_audio = CompositeAudioClip([music, voiceover]).set_duration(target_duration)
+    final_video = final_video.set_audio(mixed_audio)
+
+    output_path = os.path.join(output_dir, "reel_video.mp4")
+    final_video.write_videofile(
+        output_path,
+        fps=30,
+        codec="libx264",
+        audio_codec="aac",
+        temp_audiofile=os.path.join(output_dir, "temp_audio.m4a"),
+        remove_temp=True,
+        logger=None,
+    )
+
+    for clip in clips:
+        clip.close()
+    for path in downloaded:
+        if os.path.exists(path):
+            os.remove(path)
+    mixed_audio.close()
+    voiceover.close()
+    final_video.close()
+    return output_path
+
+
+def create_hf_video_reel(content, output_dir):
+    subtitle_lines = content.get("subtitle_lines") or []
+    voice_path = create_voiceover(
+        content["voiceover_script"],
+        os.path.join(output_dir, "voiceover.mp3"),
+    )
+    voiceover = AudioFileClip(voice_path)
+    target_duration = max(15.0, voiceover.duration + 0.8)
+    scene_prompts = build_scene_video_prompts(
+        content["title"],
+        content["points"],
+        content["image_keyword"],
+        content.get("video_prompt"),
+    )
+    save_scene_prompts(output_dir, scene_prompts)
+
+    clips = []
+    downloaded = []
+    for index, prompt in enumerate(scene_prompts):
+        print(f"🎬 Generating Hugging Face scene {index + 1}/{len(scene_prompts)}...")
+        video_bytes = generate_hf_video(prompt)
+        clip_path = os.path.join(output_dir, f"hf_scene_{index + 1}.mp4")
+        with open(clip_path, "wb") as f:
+            f.write(video_bytes)
+        downloaded.append(clip_path)
+
+    per_scene_duration = target_duration / len(downloaded)
+    for index, clip_path in enumerate(downloaded):
+        base_clip = VideoFileClip(clip_path)
+        fallback_text = content["points"][min(index, len(content["points"]) - 1)] if content["points"] else content["title"]
+        subtitle_text = subtitle_lines[index] if len(subtitle_lines) > index else fallback_text
+        clip = fit_vertical_clip(base_clip, per_scene_duration)
+        subtitle_clip = create_subtitle_overlay(subtitle_text, per_scene_duration)
+        clip = CompositeVideoClip([clip, subtitle_clip.set_position(("center", "bottom"))]).set_duration(
+            per_scene_duration
+        )
+        clips.append(clip)
+
+    final_video = concatenate_videoclips(clips, method="compose").set_duration(target_duration)
+    voiceover = voiceover.set_start(0).volumex(1.0)
+    music = create_background_music(target_duration).set_duration(target_duration).volumex(0.22)
+    mixed_audio = CompositeAudioClip([music, voiceover]).set_duration(target_duration)
+    final_video = final_video.set_audio(mixed_audio)
+
+    output_path = os.path.join(output_dir, "reel_video.mp4")
+    final_video.write_videofile(
+        output_path,
+        fps=30,
+        codec="libx264",
+        audio_codec="aac",
+        temp_audiofile=os.path.join(output_dir, "temp_audio.m4a"),
+        remove_temp=True,
+        logger=None,
+    )
+
+    for clip in clips:
+        clip.close()
+    for path in downloaded:
+        if os.path.exists(path):
+            os.remove(path)
+    mixed_audio.close()
+    voiceover.close()
+    final_video.close()
     return output_path
 
 
@@ -476,6 +735,7 @@ def create_reel_video(
     output_dir = os.path.join(os.getcwd(), "output")
     video_prompt = build_video_prompt(title, points, image_keyword, video_prompt)
     content["video_prompt"] = video_prompt
+    content["scene_prompts"] = build_scene_video_prompts(title, points, image_keyword, video_prompt)
     content["voiceover_script"] = voiceover_script or (
         f"Did you know these {len(points[:4])} AI tools exist? "
         + " ".join(
@@ -492,7 +752,13 @@ def create_reel_video(
     print(f"🗂️ Saved metadata: {metadata_path}")
 
     try:
-        if has_pexels_access():
+        if has_hf_video_access():
+            print("🎞️ Creating reel from Hugging Face scene-by-scene video clips...")
+            output_path = create_hf_video_reel(content, output_dir)
+        elif has_xai_video_access():
+            print("🎞️ Creating reel from Grok scene-by-scene video clips...")
+            output_path = create_grok_video_reel(content, output_dir)
+        elif has_pexels_access():
             print("🎞️ Creating reel from real stock video clips...")
             output_path = create_stock_video_reel(content, output_dir)
         else:

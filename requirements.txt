@@ -9,6 +9,7 @@ google-auth
 google-auth-oauthlib
 google-genai
 gTTS
+huggingface_hub
 imageio
 imageio-ffmpeg
 moviepy==1.0.3
