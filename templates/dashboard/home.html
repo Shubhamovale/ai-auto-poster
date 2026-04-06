@@ -5,9 +5,9 @@
 {% block content %}
 <section class="grid two">
     <div class="panel">
-        <div class="muted">Workspace</div>
+        <div class="muted">Content space</div>
         <h1>{{ workspace.name }}</h1>
-        <p>{{ workspace.brand_voice|default:"Set a brand voice to guide AI content generation." }}</p>
+        <p>{{ workspace.brand_voice|default:"Use this space for creators, personal brands, businesses, agencies, or community pages. Add a tone later if you want AI content to follow a style." }}</p>
         <div class="actions">
             <a class="button" href="{% url 'dashboard:create_post' %}">New Post</a>
             <a class="button secondary" href="{% url 'dashboard:connect_account' %}">Connect Account</a>

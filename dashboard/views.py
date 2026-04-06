@@ -43,6 +43,7 @@ from social_accounts.models import SocialAccount
 from social_accounts.forms import SocialAccountForm
 from workspaces.forms import WorkspaceForm
 from workspaces.models import Workspace, WorkspaceMembership
+from workspaces.services import ensure_default_workspace
 
 YOUTUBE_SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
@@ -58,27 +59,9 @@ class LandingPageView(TemplateView):
 
 @login_required
 def home(request):
-    workspace = request.user.owned_workspaces.first()
-    if workspace is None:
-        if request.method == "POST":
-            form = WorkspaceForm(request.POST)
-            if form.is_valid():
-                workspace = form.save(commit=False)
-                workspace.owner = request.user
-                workspace.save()
-                WorkspaceMembership.objects.get_or_create(
-                    workspace=workspace,
-                    user=request.user,
-                    defaults={"role": WorkspaceMembership.Role.OWNER},
-                )
-                assign_free_plan(workspace)
-                messages.success(request, "Workspace created. You can start scheduling posts.")
-                return redirect("dashboard:home")
-        else:
-            form = WorkspaceForm()
-        return render(request, "dashboard/create_workspace.html", {"form": form})
-
-    assign_free_plan(workspace)
+    workspace, created = ensure_default_workspace(request.user)
+    if created:
+        messages.success(request, "We created your content space so you can start posting right away.")
     usage = get_or_create_usage_record(workspace)
     posts = workspace.posts.order_by("-created_at")[:10]
     social_accounts = workspace.social_accounts.order_by("platform")
@@ -99,7 +82,7 @@ def home(request):
 
 @login_required
 def create_post(request):
-    workspace = get_object_or_404(Workspace, owner=request.user)
+    workspace, _ = ensure_default_workspace(request.user)
     if not can_create_post(workspace):
         messages.error(request, "Your plan limit has been reached for this month.")
         return redirect("dashboard:home")
@@ -144,7 +127,7 @@ def create_post(request):
 
 @login_required
 def save_generated_post(request):
-    workspace = get_object_or_404(Workspace, owner=request.user)
+    workspace, _ = ensure_default_workspace(request.user)
     ai_payload = request.session.get("draft_ai_payload")
     if not ai_payload:
         messages.error(request, "Generate a draft first.")
@@ -165,7 +148,7 @@ def save_generated_post(request):
 
 @login_required
 def edit_post(request, post_id):
-    workspace = get_object_or_404(Workspace, owner=request.user)
+    workspace, _ = ensure_default_workspace(request.user)
     post = get_object_or_404(Post, workspace=workspace, pk=post_id)
     if request.method == "POST":
         form = PostForm(request.POST, instance=post)
@@ -190,7 +173,7 @@ def edit_post(request, post_id):
 
 @login_required
 def connect_account(request):
-    workspace = get_object_or_404(Workspace, owner=request.user)
+    workspace, _ = ensure_default_workspace(request.user)
     show_advanced_setup = request.method == "POST" or request.GET.get("advanced") == "1"
     if request.method == "POST":
         form = SocialAccountForm(request.POST)
@@ -259,7 +242,7 @@ def _decode_jwt_payload(token):
 
 @login_required
 def start_youtube_oauth(request):
-    workspace = get_object_or_404(Workspace, owner=request.user)
+    workspace, _ = ensure_default_workspace(request.user)
     try:
         flow = Flow.from_client_config(
             _youtube_client_config(),
@@ -282,7 +265,7 @@ def start_youtube_oauth(request):
 
 @login_required
 def start_facebook_oauth(request):
-    workspace = get_object_or_404(Workspace, owner=request.user)
+    workspace, _ = ensure_default_workspace(request.user)
     if not settings.FACEBOOK_OAUTH_APP_ID or not settings.FACEBOOK_OAUTH_APP_SECRET:
         messages.error(
             request,
@@ -307,7 +290,7 @@ def start_facebook_oauth(request):
 
 @login_required
 def start_linkedin_oauth(request):
-    workspace = get_object_or_404(Workspace, owner=request.user)
+    workspace, _ = ensure_default_workspace(request.user)
     if not settings.LINKEDIN_OAUTH_CLIENT_ID or not settings.LINKEDIN_OAUTH_CLIENT_SECRET:
         messages.error(
             request,
@@ -580,7 +563,7 @@ def select_facebook_page(request):
 
 @login_required
 def edit_account(request, account_id):
-    workspace = get_object_or_404(Workspace, owner=request.user)
+    workspace, _ = ensure_default_workspace(request.user)
     social_account = get_object_or_404(workspace.social_accounts, pk=account_id)
     if request.method == "POST":
         form = SocialAccountForm(request.POST, instance=social_account)
@@ -599,7 +582,7 @@ def edit_account(request, account_id):
 
 @login_required
 def disconnect_account(request, account_id):
-    workspace = get_object_or_404(Workspace, owner=request.user)
+    workspace, _ = ensure_default_workspace(request.user)
     social_account = get_object_or_404(workspace.social_accounts, pk=account_id)
     if request.method == "POST":
         social_account.is_connected = False
@@ -610,7 +593,7 @@ def disconnect_account(request, account_id):
 
 @login_required
 def change_plan(request, plan_code):
-    workspace = get_object_or_404(Workspace, owner=request.user)
+    workspace, _ = ensure_default_workspace(request.user)
     if plan_code == SubscriptionPlan.Code.FREE:
         set_workspace_plan(workspace, plan_code)
         messages.success(request, f"Plan updated to {plan_code.title()}.")
@@ -621,7 +604,7 @@ def change_plan(request, plan_code):
 
 @login_required
 def publish_now(request, post_id):
-    workspace = get_object_or_404(Workspace, owner=request.user)
+    workspace, _ = ensure_default_workspace(request.user)
     post = get_object_or_404(Post, workspace=workspace, pk=post_id)
     if request.method != "POST":
         return redirect("dashboard:edit_post", post_id=post.id)
@@ -643,7 +626,7 @@ def publish_now(request, post_id):
 
 @login_required
 def subscribe_plan(request, plan_code):
-    workspace = get_object_or_404(Workspace, owner=request.user)
+    workspace, _ = ensure_default_workspace(request.user)
     plan = get_object_or_404(SubscriptionPlan, code=plan_code, is_active=True)
     if plan.code == SubscriptionPlan.Code.FREE:
         set_workspace_plan(workspace, plan.code)
@@ -691,7 +674,7 @@ def razorpay_verify(request):
     if request.method != "POST":
         return HttpResponseBadRequest("Invalid request method.")
 
-    workspace = get_object_or_404(Workspace, owner=request.user)
+    workspace, _ = ensure_default_workspace(request.user)
     subscription = workspace.subscription
     payment_id = request.POST.get("razorpay_payment_id", "")
     subscription_id = request.POST.get("razorpay_subscription_id", "")

@@ -4,12 +4,12 @@
 
 {% block content %}
 <div class="panel" style="max-width: 720px; margin: 0 auto;">
-    <h1>Create your workspace</h1>
-    <p class="muted">This is the home for one brand or client account.</p>
+    <h1>Create your content space</h1>
+    <p class="muted">Use this for a creator page, personal brand, business, or any account you want to grow. Website and tone details are optional.</p>
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
-        <button type="submit">Create workspace</button>
+        <button type="submit">Create space</button>
     </form>
 </div>
 {% endblock %}

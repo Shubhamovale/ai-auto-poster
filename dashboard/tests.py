@@ -38,6 +38,22 @@ class DashboardSmokeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Workspace One")
 
+    def test_dashboard_home_auto_creates_default_workspace(self):
+        user = User.objects.create_user(
+            username="creator-user",
+            email="creator@example.com",
+            password="strong-pass-123",
+        )
+        client = Client()
+        client.login(username="creator-user", password="strong-pass-123")
+
+        response = client.get(reverse("dashboard:home"))
+
+        self.assertEqual(response.status_code, 200)
+        workspace = Workspace.objects.get(owner=user)
+        self.assertEqual(workspace.name, "creator-user's space")
+        self.assertContains(response, "creator-user&#x27;s space")
+
     def test_edit_post_renders(self):
         response = self.client.get(reverse("dashboard:edit_post", args=[self.post.id]))
         self.assertEqual(response.status_code, 200)
