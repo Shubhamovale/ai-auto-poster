@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib.auth import authenticate
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, UserCreationForm
 from django.contrib.auth.models import User
 
 
@@ -51,6 +51,18 @@ class EmailOrUsernameAuthenticationForm(AuthenticationForm):
             self.confirm_login_allowed(self.user_cache)
 
         return self.cleaned_data
+
+
+class StyledPasswordResetForm(PasswordResetForm):
+    email = forms.EmailField(
+        label="Registered email",
+        widget=forms.EmailInput(
+            attrs={
+                "autocomplete": "email",
+                "placeholder": "Enter the email used to create your account",
+            }
+        ),
+    )
 
 
 class EmailOTPForm(forms.Form):

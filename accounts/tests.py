@@ -84,6 +84,28 @@ class SignupOTPTests(TestCase):
         refreshed_otp = self.client.session["signup_otp_state"]["otp"]
         self.assertNotEqual(original_otp, refreshed_otp)
 
+    def test_signup_rejects_duplicate_email(self):
+        User.objects.create_user(
+            username="existing-user",
+            email="otp@example.com",
+            password="VeryStrongPass123",
+        )
+
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "otp-user",
+                "email": "otp@example.com",
+                "company_name": "Acme",
+                "password1": "VeryStrongPass123",
+                "password2": "VeryStrongPass123",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "An account with this email already exists.")
+        self.assertFalse("signup_otp_state" in self.client.session)
+
 
 class EmailLoginTests(TestCase):
     def setUp(self):
@@ -111,3 +133,21 @@ class EmailLoginTests(TestCase):
 
         self.assertRedirects(response, reverse("dashboard:home"))
         self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.id)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_password_reset_sends_email_for_registered_user(self):
+        response = self.client.post(
+            reverse("password_reset"),
+            {"email": "shubham12@gmail.com"},
+        )
+
+        self.assertRedirects(response, reverse("password_reset_done"))
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("reset", mail.outbox[0].subject.lower())
+        self.assertIn("shubham12@gmail.com", mail.outbox[0].to)
+
+    def test_login_page_contains_forgot_password_link(self):
+        response = self.client.get(reverse("login"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("password_reset"))
