@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Signup | AI Auto Poster</title>
+    <link rel="icon" type="image/x-icon" href="./favicon.ico">
+    <link rel="icon" type="image/png" href="./favicon-black.png">
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <div class="shell">
+        <div class="topbar">
+            <a href="/" class="brand">AI Auto Poster</a>
+            <div class="actions">
+                <a class="button ghost" href="/">Home</a>
+                <a class="button secondary" href="/login">Already have an account?</a>
+            </div>
+        </div>
+        <div class="auth-shell">
+            <section class="auth-card">
+                <div class="section-kicker">Signup handoff</div>
+                <h1>Create your account and launch your posting system.</h1>
+                <p>This frontend can market the signup flow beautifully, while your Django backend still creates the real user and workspace securely.</p>
+                <div class="auth-form-note">
+                    <strong>Backend signup destination</strong>
+                    <span data-backend-origin></span><br>
+                    <code class="inline-url" data-backend-origin></code>
+                </div>
+                <div class="auth-points">
+                    <div class="auth-point">Start with your account details on the secure backend signup page.</div>
+                    <div class="auth-point">Create the workspace right after signup.</div>
+                    <div class="auth-point">Move straight into the dashboard to connect accounts and schedule posts.</div>
+                </div>
+                <div class="auth-actions">
+                    <a class="button" data-backend-path="/accounts/signup/" href="#">Continue to Signup</a>
+                    <a class="button secondary" href="/login">Already have an account?</a>
+                </div>
+            </section>
+        </div>
+    </div>
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+</body>
+</html>
