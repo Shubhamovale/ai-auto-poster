@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Verify Email{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 560px; margin: 0 auto;">
+    <h1>Verify your email</h1>
+    <p class="muted">Enter the 6-digit OTP sent to <strong>{{ pending_email }}</strong>. The code stays valid for {{ otp_valid_minutes }} minutes.</p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Verify and continue</button>
+    </form>
+    <form method="post" style="margin-top: 1rem;">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="resend">
+        <button type="submit" class="secondary">Resend code</button>
+    </form>
+    <p class="muted" style="margin-top: 1rem;">Need to change the email? <a href="{% url 'signup' %}">Start again</a>.</p>
+</div>
+{% endblock %}

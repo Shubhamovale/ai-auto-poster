@@ -106,6 +106,13 @@ Core Django:
 - `SECURE_HSTS_SECONDS`
 - `SECURE_HSTS_INCLUDE_SUBDOMAINS`
 - `SECURE_HSTS_PRELOAD`
+- `EMAIL_BACKEND`
+- `EMAIL_HOST`
+- `EMAIL_PORT`
+- `EMAIL_HOST_USER`
+- `EMAIL_HOST_PASSWORD`
+- `EMAIL_USE_TLS`
+- `DEFAULT_FROM_EMAIL`
 
 Database and async:
 
@@ -156,11 +163,38 @@ Archive and billing:
 ## How the app works
 
 1. Create an account.
-2. Create a workspace.
-3. Connect Facebook and YouTube from the dashboard.
-4. Create or refine an AI-assisted post.
-5. Schedule it or publish immediately.
-6. Upgrade to a paid plan from the pricing table.
+2. Enter the OTP sent to your email.
+3. Create a workspace.
+4. Connect Facebook and YouTube from the dashboard.
+5. Create or refine an AI-assisted post.
+6. Schedule it or publish immediately.
+7. Upgrade to a paid plan from the pricing table.
+
+## Email OTP verification
+
+Signup includes a 6-digit email verification code that expires after 10 minutes.
+
+Default behavior:
+
+- local development uses Django's console email backend, so OTPs print in the terminal
+- production should use SMTP so real emails are delivered
+
+Example Gmail SMTP config:
+
+```env
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=your-gmail@gmail.com
+EMAIL_HOST_PASSWORD=your-gmail-app-password
+EMAIL_USE_TLS=1
+DEFAULT_FROM_EMAIL=your-gmail@gmail.com
+```
+
+Important:
+
+- use a Gmail App Password if you send through Gmail
+- unverified users are not created until the OTP is confirmed
 
 ## Connected account fields
 

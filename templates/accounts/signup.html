@@ -5,7 +5,7 @@
 {% block content %}
 <div class="panel" style="max-width: 620px; margin: 0 auto;">
     <h1>Create your account</h1>
-    <p class="muted">We will create your login first, then your workspace.</p>
+    <p class="muted">We will email a 6-digit OTP to verify your address before creating the account.</p>
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
