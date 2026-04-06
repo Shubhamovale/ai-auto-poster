@@ -5,6 +5,7 @@
 {% block content %}
 <div class="panel" style="max-width: 520px; margin: 0 auto;">
     <h1>Welcome back</h1>
+    <p class="muted">Use your username or the email you registered with.</p>
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
