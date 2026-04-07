@@ -149,7 +149,7 @@ def create_subtitle_overlay(text, duration, size=(1080, 1920)):
     except Exception:
         font = ImageFont.load_default()
 
-    wrapped = textwrap.fill(text.upper(), width=18)
+    wrapped = textwrap.fill(text.upper(), width=16)
     lines = wrapped.split("\n")
     line_height = 80
     total_height = len(lines) * line_height + 44
@@ -170,13 +170,58 @@ def create_subtitle_overlay(text, duration, size=(1080, 1920)):
         draw.text((x, y), line, font=font, fill="white")
         y += line_height
 
-    return ImageClip(np.array(canvas)).set_duration(duration)
+    base = ImageClip(np.array(canvas)).set_duration(duration)
+
+    def subtitle_position(t):
+        progress = min(max(t / max(duration, 0.001), 0), 1)
+        settle = min(progress / 0.18, 1)
+        lift = int((1 - settle) * 44)
+        pulse = int(max(0, np.sin(progress * np.pi * 1.2)) * 6)
+        return ("center", top - lift - pulse)
+
+    return base.set_position(subtitle_position).fadein(min(0.12, duration / 4))
 
 
 def create_transition_flash(duration, color=(255, 255, 255), opacity=0.16, size=(1080, 1920)):
     flash_duration = max(0.04, min(0.14, duration))
     flash = ColorClip(size, color=color).set_duration(flash_duration).set_opacity(opacity)
     return flash.fx(fadeout, min(0.12, flash_duration))
+
+
+def create_hud_overlay(duration, motif, visual_world, size=(1080, 1920)):
+    if motif not in {"interface", "product", "stage"}:
+        return None
+
+    width, height = size
+    canvas = Image.new("RGBA", size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+    accent = visual_world["accent"]
+
+    if motif == "interface":
+        draw.rounded_rectangle((90, 180, width - 90, 430), radius=28, outline=(*accent, 110), width=3)
+        draw.rounded_rectangle((130, 230, width - 180, 266), radius=12, fill=(255, 255, 255, 36))
+        draw.rounded_rectangle((130, 292, width - 260, 324), radius=10, fill=(255, 255, 255, 24))
+        draw.rounded_rectangle((130, 348, width - 340, 380), radius=10, fill=(255, 255, 255, 20))
+        draw.arc((width - 320, 520, width - 100, 740), start=210, end=340, fill=(*accent, 120), width=5)
+        draw.arc((width - 350, 490, width - 70, 770), start=205, end=345, fill=(255, 255, 255, 60), width=2)
+    elif motif == "product":
+        draw.rounded_rectangle((110, 220, width - 110, height - 260), radius=42, outline=(*accent, 75), width=3)
+        draw.line((160, 280, width - 160, 280), fill=(255, 255, 255, 45), width=2)
+        draw.line((160, height - 320, width - 160, height - 320), fill=(255, 255, 255, 45), width=2)
+        draw.ellipse((width - 260, 180, width - 140, 300), outline=(*accent, 120), width=4)
+    elif motif == "stage":
+        draw.line((120, height - 420, width - 120, height - 420), fill=(*accent, 90), width=4)
+        draw.line((190, height - 360, width - 190, height - 360), fill=(255, 255, 255, 45), width=2)
+        draw.arc((120, 120, width - 120, height - 520), start=18, end=162, fill=(*accent, 85), width=4)
+
+    clip = ImageClip(np.array(canvas)).set_duration(duration)
+
+    def overlay_position(t):
+        progress = min(max(t / max(duration, 0.001), 0), 1)
+        drift = int((1 - progress) * 12)
+        return (0, -drift)
+
+    return clip.set_position(overlay_position).fadein(min(0.12, duration / 4)).set_opacity(0.82)
 
 
 def _seed_from_text(*parts):
