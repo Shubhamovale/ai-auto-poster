@@ -27,6 +27,11 @@ if not hasattr(Image, "ANTIALIAS"):
 
 
 VOICEOVER_SPEED = float(os.environ.get("VOICEOVER_SPEED", "1.12"))
+ALLOW_STOCK_FALLBACK = os.environ.get("ALLOW_STOCK_FALLBACK", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 
 def fetch_background_image(keyword):
@@ -570,17 +575,27 @@ def create_reel_video(
     print(f"📝 Saved prompt: {prompt_path}")
     print(f"🗂️ Saved metadata: {metadata_path}")
 
-    try:
-        if has_pexels_access():
-            print("🎞️ Creating reel from real stock video clips...")
-            output_path = create_stock_video_reel(content, output_dir)
-        else:
+    if not has_pexels_access():
+        if ALLOW_STOCK_FALLBACK:
             print("🎞️ Pexels key missing, falling back to slideshow reel...")
             output_path = create_slideshow_reel(content, output_dir)
-    except Exception as e:
-        print(f"Stock video reel failed: {e}")
-        print("🎞️ Falling back to slideshow reel...")
-        output_path = create_slideshow_reel(content, output_dir)
+        else:
+            raise RuntimeError(
+                "PEXELS_API_KEY missing and fallback stock/slideshow generation is disabled."
+            )
+    else:
+        try:
+            print("🎞️ Creating reel from real stock video clips...")
+            output_path = create_stock_video_reel(content, output_dir)
+        except Exception as e:
+            if ALLOW_STOCK_FALLBACK:
+                print(f"Stock video reel failed: {e}")
+                print("🎞️ Falling back to slideshow reel...")
+                output_path = create_slideshow_reel(content, output_dir)
+            else:
+                raise RuntimeError(
+                    f"Strict production mode: stock fallback disabled after video failure: {e}"
+                ) from e
 
     print(f"✅ Video created: {output_path}")
     return output_path, prompt_path, metadata_path
