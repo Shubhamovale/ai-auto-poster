@@ -22,21 +22,70 @@ from create_video import (
 )
 
 
-def build_scene_durations(total_duration, subtitles):
-    scene_count = max(len(subtitles), 1)
-    word_counts = [max(3, len(re.findall(r"\w+", subtitle))) for subtitle in subtitles]
+def build_scene_durations(total_duration, spoken_beats):
+    scene_count = max(len(spoken_beats), 1)
+    word_counts = [max(2, len(re.findall(r"\w+", beat))) for beat in spoken_beats]
     if not word_counts:
         word_counts = [8]
     total_words = sum(word_counts)
-    durations = [max(3.2, total_duration * (count / total_words)) for count in word_counts]
+    min_duration = 0.95 if scene_count >= 8 else 1.05
+    max_duration = 1.85 if scene_count >= 8 else 2.2
+    durations = [
+        max(min_duration, min(max_duration, total_duration * (count / total_words)))
+        for count in word_counts
+    ]
     scale = total_duration / sum(durations)
     durations = [duration * scale for duration in durations]
     if durations:
-        durations[0] = max(4.8, durations[0])
-        durations[-1] = max(3.8, durations[-1])
+        durations[0] = max(1.2, min(1.9, durations[0]))
+        durations[-1] = max(1.0, min(1.6, durations[-1]))
         scale = total_duration / sum(durations)
         durations = [duration * scale for duration in durations]
     return durations
+
+
+def normalize_scene_plan(content):
+    scene_plan = (content.get("scene_plan") or [])[:10]
+    if scene_plan:
+        return scene_plan
+
+    keywords = (content.get("scene_keywords") or [])[:10]
+    if not keywords:
+        keywords = [content["topic"]]
+
+    subtitles = content.get("subtitle_lines") or split_sentences(content["voiceover_script"])
+    subtitles = [line for line in subtitles if line][:10]
+    if len(subtitles) < 8:
+        subtitles = subtitles + [content["hook"]] * (8 - len(subtitles))
+
+    scene_count = min(max(len(subtitles), len(keywords), 8), 10)
+    scene_keywords = (keywords * scene_count)[:scene_count]
+    subtitles = (subtitles * scene_count)[:scene_count]
+    transitions = ["cut", "push", "cut", "flash", "slide", "cut", "zoom", "cut", "flash", "fade"]
+    return [
+        {
+            "visual_keyword": scene_keywords[index],
+            "subtitle": subtitles[index],
+            "line": subtitles[index],
+            "transition": transitions[index % len(transitions)],
+        }
+        for index in range(scene_count)
+    ]
+
+
+def apply_transition_to_clip(clip, transition):
+    transition = (transition or "cut").lower()
+    if transition == "push":
+        return clip.resize(lambda t: 1.02 + (0.06 * min(max(t / max(clip.duration, 0.01), 0), 1)))
+    if transition == "zoom":
+        return clip.resize(lambda t: 1.04 + (0.10 * min(max(t / max(clip.duration, 0.01), 0), 1)))
+    if transition == "slide":
+        return clip.set_position(lambda t: (0, int(-40 * min(max(t / max(clip.duration, 0.01), 0), 1))))
+    if transition == "flash":
+        return clip.fx(lambda c: c.fadein(0.06).fadeout(0.06))
+    if transition == "fade":
+        return clip.fadein(0.12).fadeout(0.12)
+    return clip.fadein(0.05).fadeout(0.05)
 
 
 def save_story_assets(output_dir, content):
@@ -86,25 +135,20 @@ def create_story_short(content):
         os.path.join(output_dir, "story_voiceover.mp3"),
     )
     voiceover = AudioFileClip(voice_path)
-    target_duration = max(45.0, min(75.0, voiceover.duration + 2.0))
+    target_duration = max(15.0, min(30.0, voiceover.duration + 0.6))
 
-    keywords = (content.get("scene_keywords") or [])[:10]
-    if not keywords:
-        keywords = [content["topic"]]
+    scene_plan = normalize_scene_plan(content)
 
-    subtitles = content.get("subtitle_lines") or split_sentences(content["voiceover_script"])
-    subtitles = subtitles[:10]
-    if len(subtitles) < 8:
-        subtitles = subtitles + [content["hook"]] * (8 - len(subtitles))
-
-    scene_count = min(max(len(subtitles), len(keywords), 8), 10)
-    scene_keywords = (keywords * scene_count)[:scene_count]
-    subtitles = (subtitles * scene_count)[:scene_count]
-    scene_durations = build_scene_durations(target_duration, subtitles)
+    spoken_beats = [
+        item.get("line") or item.get("subtitle") or content["hook"]
+        for item in scene_plan
+    ]
+    scene_durations = build_scene_durations(target_duration, spoken_beats)
 
     downloaded = []
     clips = []
-    for index, keyword in enumerate(scene_keywords):
+    for index, scene in enumerate(scene_plan):
+        keyword = scene.get("visual_keyword") or scene.get("visual_direction") or content["topic"]
         link = fetch_pexels_video(keyword)
         if not link:
             raise RuntimeError(f"No stock video found for keyword: {keyword}")
@@ -115,7 +159,8 @@ def create_story_short(content):
         base_clip = VideoFileClip(clip_path)
         scene_duration = scene_durations[index]
         clip = fit_vertical_clip(base_clip, scene_duration)
-        subtitle = subtitles[index] if index < len(subtitles) else content["hook"]
+        clip = apply_transition_to_clip(clip, scene_plan[index].get("transition"))
+        subtitle = scene_plan[index].get("subtitle") or content["hook"]
         subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
         composed = CompositeVideoClip(
             [clip, subtitle_clip.set_position(("center", "bottom"))]
@@ -124,7 +169,7 @@ def create_story_short(content):
 
     final_video = concatenate_videoclips(clips, method="compose").set_duration(target_duration)
     voiceover = voiceover.set_start(0).volumex(1.0)
-    music = create_background_music(target_duration).set_duration(target_duration).volumex(0.18)
+    music = create_background_music(target_duration).set_duration(target_duration).volumex(0.16)
     mixed_audio = CompositeAudioClip([music, voiceover]).set_duration(target_duration)
     final_video = final_video.set_audio(mixed_audio)
 
