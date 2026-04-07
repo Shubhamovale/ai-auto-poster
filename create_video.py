@@ -10,7 +10,6 @@ import requests
 from gtts import gTTS
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.audio.AudioClip import AudioArrayClip
-from moviepy.audio.fx.all import audio_speedx
 from moviepy.editor import (
     AudioFileClip,
     CompositeAudioClip,
@@ -19,6 +18,7 @@ from moviepy.editor import (
     VideoFileClip,
     concatenate_videoclips,
 )
+from moviepy.video.fx.all import speedx
 from moviepy.video.fx.fadein import fadein
 from moviepy.video.fx.fadeout import fadeout
 
@@ -319,7 +319,7 @@ def apply_voiceover_speed(output_path, speed=VOICEOVER_SPEED):
 
     sped_path = os.path.splitext(output_path)[0] + "_sped.mp3"
     clip = AudioFileClip(output_path)
-    sped_clip = clip.fx(audio_speedx, speed)
+    sped_clip = clip.fx(speedx, speed)
     sped_clip.write_audiofile(sped_path, logger=None)
     sped_clip.close()
     clip.close()

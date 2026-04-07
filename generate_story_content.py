@@ -67,6 +67,7 @@ Return ONLY JSON with no extra text:
 Rules:
 - Make the pacing feel like a story, not a listicle.
 - The hook must create curiosity in the first 1.5 seconds.
+- The first 3 scenes must escalate fast: hook, reveal, consequence.
 - The voiceover should sound natural when spoken out loud, but fast and energetic like a premium shorts narrator.
 - Use short, punchy spoken lines. Avoid slow filler words.
 - Make the narration feel like rapid spoken beats, not long explanatory sentences.
@@ -79,6 +80,7 @@ Rules:
 - Make each scene visually distinct from the one before it.
 - Each `subtitle` should be 2 to 6 words only.
 - Each `line` should feel like one short spoken beat, not a paragraph.
+- The final scene should end with a viral CTA beat like "would you try this?", "part 2?", "comment now", or "follow for more".
 - If the story mentions a brand or copyrighted title, use brand-safe proxy visuals.
 - Example: for Netflix use streaming app UI, couch watching, TV thumbnails, remote control, red interface glow.
 - Subtitle lines must be short and readable on mobile.
@@ -223,6 +225,36 @@ def _subtitle_from_beat(text, fallback):
     return cleaned.upper()
 
 
+def _boost_hook_line(text, index):
+    cleaned = " ".join((text or "").split())
+    if not cleaned:
+        return cleaned
+
+    templates = [
+        lambda value: value,
+        lambda value: f"Then this happened: {value}" if not value.lower().startswith("then") else value,
+        lambda value: f"And it got bigger fast: {value}" if "bigger" not in value.lower() else value,
+    ]
+    return templates[min(index, len(templates) - 1)](cleaned)
+
+
+def _boost_hook_subtitle(text, index):
+    cleaned = _subtitle_from_beat(text, text)
+    presets = ["WAIT WHAT", "THEN THIS", "IT GETS BIGGER"]
+    return presets[index] if index < len(presets) else cleaned
+
+
+def _viral_cta_line(content):
+    title = " ".join((content.get("title") or "").split())
+    hook = " ".join((content.get("hook") or "").split())
+    source = title or hook or "this story"
+    return f"Would you try this yourself? Follow for part two on {source}."
+
+
+def _viral_cta_subtitle():
+    return "FOLLOW FOR PART 2"
+
+
 def _build_default_scene_plan(topic, content):
     raw_lines = [content["hook"], content["summary"], *content["story_beats"]]
     lines = []
@@ -236,14 +268,24 @@ def _build_default_scene_plan(topic, content):
     for index in range(scene_count):
         fallback_line = lines[index] if index < len(lines) else content["hook"]
         raw_keyword = keywords[index] if index < len(keywords) else topic
+        line = _trim_line(fallback_line, content["hook"])
+        subtitle = _subtitle_from_beat(
+            content["subtitle_lines"][index] if index < len(content["subtitle_lines"]) else fallback_line,
+            fallback_line,
+        )
+
+        if index < 3:
+            line = _boost_hook_line(line, index)
+            subtitle = _boost_hook_subtitle(subtitle, index)
+        elif index == scene_count - 1:
+            line = _viral_cta_line(content)
+            subtitle = _viral_cta_subtitle()
+
         keyword = _build_search_keyword(topic, focus_terms, fallback_line, {"visual_keyword": raw_keyword}, index)
         plan.append(
             {
-                "line": _trim_line(fallback_line, content["hook"]),
-                "subtitle": _subtitle_from_beat(
-                    content["subtitle_lines"][index] if index < len(content["subtitle_lines"]) else fallback_line,
-                    fallback_line,
-                ),
+                "line": line,
+                "subtitle": subtitle,
                 "visual_keyword": keyword,
                 "visual_direction": raw_keyword,
                 "transition": transitions[index % len(transitions)],
@@ -316,10 +358,15 @@ def normalize_story_content(topic, topic_info, content):
             or (content["story_beats"][index - 2] if index >= 2 and index - 2 < len(content["story_beats"]) else content["hook"])
         )
         raw_keyword = scene.get("visual_keyword") or scene.get("visual_direction") or topic
+        line = _trim_line(scene.get("line"), fallback_line)
+        subtitle = _subtitle_from_beat(scene.get("subtitle"), fallback_line)
+        if index < 3:
+            line = _boost_hook_line(line, index)
+            subtitle = _boost_hook_subtitle(subtitle, index)
         normalized_scene_plan.append(
             {
-                "line": _trim_line(scene.get("line"), fallback_line),
-                "subtitle": _subtitle_from_beat(scene.get("subtitle"), fallback_line),
+                "line": line,
+                "subtitle": subtitle,
                 "visual_keyword": _build_search_keyword(topic, focus_terms, fallback_line, scene, index),
                 "visual_direction": scene.get("visual_direction") or raw_keyword,
                 "transition": (scene.get("transition") or "cut").lower(),
@@ -350,6 +397,18 @@ def normalize_story_content(topic, topic_info, content):
             if len(content["scene_plan"]) >= 8:
                 break
             content["scene_plan"].append(scene)
+
+    if content["scene_plan"]:
+        last_index = len(content["scene_plan"]) - 1
+        content["scene_plan"][last_index]["line"] = _viral_cta_line(content)
+        content["scene_plan"][last_index]["subtitle"] = _viral_cta_subtitle()
+        content["scene_plan"][last_index]["visual_keyword"] = _build_search_keyword(
+            topic,
+            focus_terms,
+            content["scene_plan"][last_index]["line"],
+            content["scene_plan"][last_index],
+            last_index,
+        )
 
     content.setdefault("youtube_description", content["summary"])
     content.setdefault("youtube_tags", ["Shorts", "Trending", "News", "Entertainment", "Story"])
