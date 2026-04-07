@@ -45,20 +45,20 @@ Return ONLY JSON with no extra text:
     "caption 8"
   ],
   "scene_plan": [
-    {
+    {{
       "line": "spoken beat 1",
       "subtitle": "short caption 1",
       "visual_keyword": "specific stock video keyword 1",
       "visual_direction": "what should be visible in this scene",
       "transition": "cut"
-    },
-    {
+    }},
+    {{
       "line": "spoken beat 2",
       "subtitle": "short caption 2",
       "visual_keyword": "specific stock video keyword 2",
       "visual_direction": "what should be visible in this scene",
       "transition": "push"
-    }
+    }}
   ],
   "youtube_description": "2 to 4 sentence English description with hashtags",
   "youtube_tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
