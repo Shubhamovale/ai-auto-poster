@@ -12,12 +12,9 @@ from moviepy.editor import (
 
 from create_video import (
     create_background_music,
+    create_generated_scene_clip,
     create_subtitle_overlay,
     create_voiceover,
-    download_file,
-    fetch_pexels_video,
-    fit_vertical_clip,
-    has_pexels_access,
     split_sentences,
 )
 
@@ -124,9 +121,6 @@ def save_story_assets(output_dir, content):
 
 
 def create_story_short(content):
-    if not has_pexels_access():
-        raise RuntimeError("PEXELS_API_KEY is required for story shorts.")
-
     output_dir = os.path.join(os.getcwd(), "output")
     metadata_path, script_path, outline_path = save_story_assets(output_dir, content)
 
@@ -145,22 +139,14 @@ def create_story_short(content):
     ]
     scene_durations = build_scene_durations(target_duration, spoken_beats)
 
-    downloaded = []
     clips = []
     for index, scene in enumerate(scene_plan):
-        keyword = scene.get("visual_keyword") or scene.get("visual_direction") or content["topic"]
-        link = fetch_pexels_video(keyword)
-        if not link:
-            raise RuntimeError(f"No stock video found for keyword: {keyword}")
-        clip_path = os.path.join(output_dir, f"story_scene_{index + 1}.mp4")
-        downloaded.append(download_file(link, clip_path))
-
-    for index, clip_path in enumerate(downloaded):
-        base_clip = VideoFileClip(clip_path)
         scene_duration = scene_durations[index]
-        clip = fit_vertical_clip(base_clip, scene_duration)
-        clip = apply_transition_to_clip(clip, scene_plan[index].get("transition"))
-        subtitle = scene_plan[index].get("subtitle") or content["hook"]
+        keyword = scene.get("visual_keyword") or scene.get("visual_direction") or content["topic"]
+        visual_direction = scene.get("visual_direction") or keyword
+        clip = create_generated_scene_clip(keyword, visual_direction, scene_duration, index)
+        clip = apply_transition_to_clip(clip, scene.get("transition"))
+        subtitle = scene.get("subtitle") or content["hook"]
         subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
         composed = CompositeVideoClip(
             [clip, subtitle_clip.set_position(("center", "bottom"))]
@@ -186,9 +172,6 @@ def create_story_short(content):
 
     for clip in clips:
         clip.close()
-    for path in downloaded:
-        if os.path.exists(path):
-            os.remove(path)
     mixed_audio.close()
     voiceover.close()
     final_video.close()

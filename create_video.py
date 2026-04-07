@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import random
 import re
@@ -169,6 +170,125 @@ def create_subtitle_overlay(text, duration, size=(1080, 1920)):
         y += line_height
 
     return ImageClip(np.array(canvas)).set_duration(duration)
+
+
+def _seed_from_text(*parts):
+    payload = "||".join(part or "" for part in parts)
+    return int(hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16], 16)
+
+
+def _gradient_background(size, seed):
+    width, height = size
+    rng = random.Random(seed)
+    base = np.zeros((height, width, 3), dtype=np.uint8)
+    color_a = np.array(
+        [rng.randint(15, 80), rng.randint(35, 140), rng.randint(70, 220)],
+        dtype=np.float32,
+    )
+    color_b = np.array(
+        [rng.randint(120, 255), rng.randint(50, 180), rng.randint(40, 170)],
+        dtype=np.float32,
+    )
+    vertical = np.linspace(0.0, 1.0, height, dtype=np.float32)[:, None, None]
+    horizontal = np.linspace(0.0, 1.0, width, dtype=np.float32)[None, :, None]
+    blend = np.clip((0.68 * vertical) + (0.32 * horizontal), 0.0, 1.0)
+    base[:] = (color_a * (1.0 - blend) + color_b * blend).astype(np.uint8)
+    return Image.fromarray(base, mode="RGB")
+
+
+def _draw_scene_shapes(draw, size, seed):
+    width, height = size
+    rng = random.Random(seed)
+
+    for _ in range(7):
+        x0 = rng.randint(-140, width - 120)
+        y0 = rng.randint(-160, height - 120)
+        x1 = x0 + rng.randint(180, 520)
+        y1 = y0 + rng.randint(160, 500)
+        color = (
+            rng.randint(120, 255),
+            rng.randint(120, 255),
+            rng.randint(120, 255),
+            rng.randint(40, 95),
+        )
+        draw.ellipse((x0, y0, x1, y1), fill=color)
+
+    for _ in range(9):
+        y = rng.randint(140, height - 180)
+        draw.rounded_rectangle(
+            (rng.randint(-40, 220), y, rng.randint(700, width + 60), y + rng.randint(8, 18)),
+            radius=9,
+            fill=(255, 255, 255, rng.randint(18, 55)),
+        )
+
+
+def create_generated_scene_frame(keyword, visual_direction="", scene_index=0, size=(1080, 1920)):
+    width, height = size
+    seed = _seed_from_text(keyword, visual_direction, str(scene_index))
+    bg = _gradient_background(size, seed).convert("RGBA")
+    overlay = Image.new("RGBA", size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    _draw_scene_shapes(draw, size, seed)
+
+    dark_top = Image.new("RGBA", size, (0, 0, 0, 0))
+    ImageDraw.Draw(dark_top).rectangle((0, 0, width, 360), fill=(4, 6, 10, 88))
+    ImageDraw.Draw(dark_top).rectangle((0, height - 320, width, height), fill=(4, 6, 10, 120))
+
+    frame = Image.alpha_composite(bg, overlay)
+    frame = Image.alpha_composite(frame, dark_top)
+    draw = ImageDraw.Draw(frame)
+
+    try:
+        label_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 34)
+        title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 88)
+        small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
+    except Exception:
+        label_font = ImageFont.load_default()
+        title_font = ImageFont.load_default()
+        small_font = ImageFont.load_default()
+
+    label = f"SCENE {scene_index + 1}"
+    draw.rounded_rectangle((72, 72, 310, 132), radius=26, fill=(255, 255, 255, 46))
+    draw.text((102, 88), label, font=label_font, fill="white")
+
+    wrapped_keyword = textwrap.fill((keyword or "TRENDING STORY").upper(), width=14)
+    title_lines = wrapped_keyword.split("\n")[:3]
+    y = 320
+    for line in title_lines:
+        bbox = draw.textbbox((0, 0), line, font=title_font, stroke_width=3)
+        line_w = bbox[2] - bbox[0]
+        x = (width - line_w) // 2
+        draw.text(
+            (x, y),
+            line,
+            font=title_font,
+            fill="white",
+            stroke_fill="black",
+            stroke_width=3,
+        )
+        y += (bbox[3] - bbox[1]) + 12
+
+    descriptor = " ".join((visual_direction or keyword or "").split())[:80].upper()
+    if descriptor:
+        descriptor = textwrap.shorten(descriptor, width=48, placeholder="...")
+        bbox = draw.textbbox((0, 0), descriptor, font=small_font)
+        line_w = bbox[2] - bbox[0]
+        x = (width - line_w) // 2
+        draw.rounded_rectangle(
+            (x - 22, height - 260, x + line_w + 22, height - 202),
+            radius=20,
+            fill=(255, 255, 255, 34),
+        )
+        draw.text((x, height - 246), descriptor, font=small_font, fill="#FFE066")
+
+    return np.array(frame.convert("RGB"))
+
+
+def create_generated_scene_clip(keyword, visual_direction, duration, scene_index):
+    frame = create_generated_scene_frame(keyword, visual_direction, scene_index)
+    zoom_start = 1.0 + (0.01 * (scene_index % 3))
+    zoom_end = 1.08 + (0.015 * (scene_index % 4))
+    return build_motion_clip(frame, duration=duration, zoom_start=zoom_start, zoom_end=zoom_end, fade=0.08)
 
 
 def build_scene_durations(target_duration, scene_count):
