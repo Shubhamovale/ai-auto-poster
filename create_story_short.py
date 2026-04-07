@@ -11,9 +11,11 @@ from moviepy.editor import (
 )
 
 from create_video import (
+    _build_visual_world,
     create_background_music,
     create_generated_scene_clip,
     create_subtitle_overlay,
+    create_transition_flash,
     create_voiceover,
     split_sentences,
 )
@@ -85,6 +87,17 @@ def apply_transition_to_clip(clip, transition):
     return clip.fadein(0.05).fadeout(0.05)
 
 
+def build_transition_flash(transition, duration):
+    transition = (transition or "cut").lower()
+    if transition == "flash":
+        return create_transition_flash(duration, color=(255, 248, 220), opacity=0.24)
+    if transition in {"push", "zoom"}:
+        return create_transition_flash(duration, color=(255, 255, 255), opacity=0.14)
+    if transition == "slide":
+        return create_transition_flash(duration, color=(200, 235, 255), opacity=0.12)
+    return None
+
+
 def save_story_assets(output_dir, content):
     os.makedirs(output_dir, exist_ok=True)
     metadata_path = os.path.join(output_dir, "story_short_metadata.json")
@@ -140,17 +153,31 @@ def create_story_short(content):
     scene_durations = build_scene_durations(target_duration, spoken_beats)
 
     clips = []
+    lead_scene = scene_plan[0] if scene_plan else {}
+    visual_world = _build_visual_world(
+        lead_scene.get("visual_keyword") or content["topic"],
+        lead_scene.get("visual_direction") or content["title"],
+    )
     for index, scene in enumerate(scene_plan):
         scene_duration = scene_durations[index]
         keyword = scene.get("visual_keyword") or scene.get("visual_direction") or content["topic"]
         visual_direction = scene.get("visual_direction") or keyword
-        clip = create_generated_scene_clip(keyword, visual_direction, scene_duration, index)
-        clip = apply_transition_to_clip(clip, scene.get("transition"))
+        clip = create_generated_scene_clip(
+            keyword,
+            visual_direction,
+            scene_duration,
+            index,
+            visual_world=visual_world,
+        )
+        transition = scene.get("transition")
+        clip = apply_transition_to_clip(clip, transition)
         subtitle = scene.get("subtitle") or content["hook"]
         subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
-        composed = CompositeVideoClip(
-            [clip, subtitle_clip.set_position(("center", "bottom"))]
-        ).set_duration(scene_duration)
+        layers = [clip, subtitle_clip.set_position(("center", "bottom"))]
+        flash_clip = build_transition_flash(transition, scene_duration)
+        if flash_clip is not None:
+            layers.append(flash_clip)
+        composed = CompositeVideoClip(layers).set_duration(scene_duration)
         clips.append(composed)
 
     final_video = concatenate_videoclips(clips, method="compose").set_duration(target_duration)

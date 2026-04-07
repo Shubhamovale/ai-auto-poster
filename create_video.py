@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 from moviepy.audio.AudioClip import AudioArrayClip
 from moviepy.editor import (
     AudioFileClip,
+    ColorClip,
     CompositeAudioClip,
     CompositeVideoClip,
     ImageClip,
@@ -172,23 +173,62 @@ def create_subtitle_overlay(text, duration, size=(1080, 1920)):
     return ImageClip(np.array(canvas)).set_duration(duration)
 
 
+def create_transition_flash(duration, color=(255, 255, 255), opacity=0.16, size=(1080, 1920)):
+    flash_duration = max(0.04, min(0.14, duration))
+    flash = ColorClip(size, color=color).set_duration(flash_duration).set_opacity(opacity)
+    return flash.fx(fadeout, min(0.12, flash_duration))
+
+
 def _seed_from_text(*parts):
     payload = "||".join(part or "" for part in parts)
     return int(hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16], 16)
 
 
-def _gradient_background(size, seed):
+def _build_visual_world(keyword, visual_direction):
+    seed = _seed_from_text(keyword, visual_direction, "visual-world")
+    rng = random.Random(seed)
+    color_a = (
+        rng.randint(18, 70),
+        rng.randint(42, 120),
+        rng.randint(78, 220),
+    )
+    color_b = (
+        rng.randint(110, 240),
+        rng.randint(60, 170),
+        rng.randint(38, 140),
+    )
+    accent = (
+        rng.randint(210, 255),
+        rng.randint(170, 245),
+        rng.randint(120, 220),
+    )
+    shadow = (
+        rng.randint(4, 20),
+        rng.randint(6, 24),
+        rng.randint(10, 34),
+    )
+    return {
+        "seed": seed,
+        "color_a": color_a,
+        "color_b": color_b,
+        "accent": accent,
+        "shadow": shadow,
+    }
+
+
+def _gradient_background(size, seed, visual_world):
     width, height = size
     rng = random.Random(seed)
     base = np.zeros((height, width, 3), dtype=np.uint8)
-    color_a = np.array(
-        [rng.randint(15, 80), rng.randint(35, 140), rng.randint(70, 220)],
+    color_a = np.array(visual_world["color_a"], dtype=np.float32)
+    color_b = np.array(visual_world["color_b"], dtype=np.float32)
+    # Keep scene-to-scene continuity while allowing subtle per-scene drift.
+    drift = np.array(
+        [rng.randint(-8, 8), rng.randint(-10, 10), rng.randint(-12, 12)],
         dtype=np.float32,
     )
-    color_b = np.array(
-        [rng.randint(120, 255), rng.randint(50, 180), rng.randint(40, 170)],
-        dtype=np.float32,
-    )
+    color_a = np.clip(color_a + drift, 0, 255)
+    color_b = np.clip(color_b - drift, 0, 255)
     vertical = np.linspace(0.0, 1.0, height, dtype=np.float32)[:, None, None]
     horizontal = np.linspace(0.0, 1.0, width, dtype=np.float32)[None, :, None]
     blend = np.clip((0.68 * vertical) + (0.32 * horizontal), 0.0, 1.0)
@@ -196,24 +236,24 @@ def _gradient_background(size, seed):
     return Image.fromarray(base, mode="RGB")
 
 
-def _draw_scene_shapes(draw, size, seed):
+def _draw_scene_shapes(draw, size, seed, visual_world):
     width, height = size
     rng = random.Random(seed)
 
-    for _ in range(7):
+    for _ in range(10):
         x0 = rng.randint(-140, width - 120)
         y0 = rng.randint(-160, height - 120)
         x1 = x0 + rng.randint(180, 520)
         y1 = y0 + rng.randint(160, 500)
         color = (
-            rng.randint(120, 255),
-            rng.randint(120, 255),
-            rng.randint(120, 255),
+            min(255, visual_world["accent"][0] + rng.randint(-24, 12)),
+            min(255, visual_world["accent"][1] + rng.randint(-30, 10)),
+            min(255, visual_world["accent"][2] + rng.randint(-38, 8)),
             rng.randint(40, 95),
         )
         draw.ellipse((x0, y0, x1, y1), fill=color)
 
-    for _ in range(9):
+    for _ in range(12):
         y = rng.randint(140, height - 180)
         draw.rounded_rectangle(
             (rng.randint(-40, 220), y, rng.randint(700, width + 60), y + rng.randint(8, 18)),
@@ -222,73 +262,236 @@ def _draw_scene_shapes(draw, size, seed):
         )
 
 
-def create_generated_scene_frame(keyword, visual_direction="", scene_index=0, size=(1080, 1920)):
+def _draw_cinematic_panels(draw, size, seed, visual_world):
     width, height = size
+    rng = random.Random(seed + 17)
+    panel_count = 2 + (seed % 2)
+    for index in range(panel_count):
+        panel_w = rng.randint(420, 760)
+        panel_h = rng.randint(300, 620)
+        x0 = rng.randint(-40, width - panel_w + 40)
+        y0 = rng.randint(140, height - panel_h - 240)
+        x1 = x0 + panel_w
+        y1 = y0 + panel_h
+        fill = (
+            max(0, min(255, visual_world["shadow"][0] + rng.randint(8, 32))),
+            max(0, min(255, visual_world["shadow"][1] + rng.randint(14, 42))),
+            max(0, min(255, visual_world["shadow"][2] + rng.randint(20, 56))),
+            rng.randint(135, 210),
+        )
+        outline = (
+            min(255, visual_world["accent"][0] + rng.randint(-12, 18)),
+            min(255, visual_world["accent"][1] + rng.randint(-14, 16)),
+            min(255, visual_world["accent"][2] + rng.randint(-16, 14)),
+            rng.randint(55, 120),
+        )
+        draw.rounded_rectangle((x0, y0, x1, y1), radius=34, fill=fill, outline=outline, width=3)
+
+        inner_lines = 3 + ((index + seed) % 4)
+        for line_index in range(inner_lines):
+            line_y = y0 + 34 + (line_index * rng.randint(46, 72))
+            if line_y >= y1 - 24:
+                break
+            draw.rounded_rectangle(
+                (x0 + 28, line_y, x1 - rng.randint(60, 180), line_y + rng.randint(10, 18)),
+                radius=8,
+                fill=(255, 255, 255, rng.randint(26, 66)),
+            )
+
+
+def _draw_light_flares(draw, size, seed, visual_world):
+    width, height = size
+    rng = random.Random(seed + 41)
+    for _ in range(3):
+        flare_w = rng.randint(320, 780)
+        flare_h = rng.randint(120, 260)
+        x0 = rng.randint(-180, width - 120)
+        y0 = rng.randint(-40, height - 160)
+        x1 = x0 + flare_w
+        y1 = y0 + flare_h
+        color = (
+            min(255, visual_world["accent"][0] + rng.randint(-8, 22)),
+            min(255, visual_world["accent"][1] + rng.randint(-30, 28)),
+            min(255, visual_world["accent"][2] + rng.randint(-46, 24)),
+            rng.randint(18, 42),
+        )
+        draw.ellipse((x0, y0, x1, y1), fill=color)
+
+
+def _draw_silhouette(draw, size, seed, visual_world):
+    width, height = size
+    rng = random.Random(seed + 89)
+    center_x = rng.randint(int(width * 0.25), int(width * 0.75))
+    base_y = rng.randint(int(height * 0.62), int(height * 0.82))
+    body_w = rng.randint(160, 260)
+    body_h = rng.randint(300, 520)
+    head_r = rng.randint(44, 72)
+
+    silhouette = (
+        visual_world["shadow"][0],
+        visual_world["shadow"][1],
+        visual_world["shadow"][2],
+        rng.randint(150, 220),
+    )
+    glow = (
+        min(255, visual_world["accent"][0] + 14),
+        min(255, visual_world["accent"][1] + 8),
+        min(255, visual_world["accent"][2] + 4),
+        rng.randint(20, 45),
+    )
+
+    draw.ellipse(
+        (center_x - head_r, base_y - body_h - (head_r * 2), center_x + head_r, base_y - body_h),
+        fill=silhouette,
+    )
+    draw.rounded_rectangle(
+        (center_x - body_w // 2, base_y - body_h, center_x + body_w // 2, base_y),
+        radius=body_w // 4,
+        fill=silhouette,
+    )
+    draw.ellipse(
+        (center_x - head_r - 18, base_y - body_h - (head_r * 2) - 18, center_x + head_r + 18, base_y - body_h + 18),
+        outline=glow,
+        width=4,
+    )
+
+
+def _directional_motif(keyword, visual_direction):
+    text = " ".join([keyword or "", visual_direction or ""]).lower()
+    if any(term in text for term in ["interface", "screen", "ui", "display", "overlay", "app"]):
+        return "interface"
+    if any(term in text for term in ["reaction", "face", "portrait", "people", "fans", "crowd"]):
+        return "portrait"
+    if any(term in text for term in ["product", "device", "phone", "glasses", "console", "controller"]):
+        return "product"
+    if any(term in text for term in ["event", "stage", "launch", "keynote", "announcement"]):
+        return "stage"
+    return "abstract"
+
+
+def _draw_hero_reveal(draw, size, visual_world):
+    width, height = size
+    center_x = width // 2
+    center_y = int(height * 0.44)
+
+    accent = visual_world["accent"]
+    shadow = visual_world["shadow"]
+
+    draw.ellipse(
+        (center_x - 250, center_y - 250, center_x + 250, center_y + 250),
+        fill=(accent[0], accent[1], accent[2], 34),
+    )
+    draw.ellipse(
+        (center_x - 180, center_y - 180, center_x + 180, center_y + 180),
+        outline=(255, 255, 255, 80),
+        width=5,
+    )
+    draw.rounded_rectangle(
+        (center_x - 190, center_y - 320, center_x + 190, center_y + 320),
+        radius=72,
+        fill=(shadow[0] + 8, shadow[1] + 10, shadow[2] + 14, 165),
+        outline=(accent[0], accent[1], accent[2], 92),
+        width=4,
+    )
+    draw.rounded_rectangle(
+        (center_x - 130, center_y - 240, center_x + 130, center_y + 160),
+        radius=48,
+        fill=(255, 255, 255, 20),
+        outline=(255, 255, 255, 52),
+        width=3,
+    )
+
+
+def create_generated_scene_frame(keyword, visual_direction="", scene_index=0, size=(1080, 1920), visual_world=None):
+    width, height = size
+    visual_world = visual_world or _build_visual_world(keyword, visual_direction)
     seed = _seed_from_text(keyword, visual_direction, str(scene_index))
-    bg = _gradient_background(size, seed).convert("RGBA")
+    bg = _gradient_background(size, seed, visual_world).convert("RGBA")
     overlay = Image.new("RGBA", size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
-    _draw_scene_shapes(draw, size, seed)
+    _draw_scene_shapes(draw, size, seed, visual_world)
+    _draw_light_flares(draw, size, seed, visual_world)
 
-    dark_top = Image.new("RGBA", size, (0, 0, 0, 0))
-    ImageDraw.Draw(dark_top).rectangle((0, 0, width, 360), fill=(4, 6, 10, 88))
-    ImageDraw.Draw(dark_top).rectangle((0, height - 320, width, height), fill=(4, 6, 10, 120))
+    motif = _directional_motif(keyword, visual_direction)
+    if motif in {"interface", "stage"}:
+        _draw_cinematic_panels(draw, size, seed, visual_world)
+    if motif in {"portrait", "stage", "abstract"}:
+        _draw_silhouette(draw, size, seed, visual_world)
+    if motif == "product":
+        _draw_cinematic_panels(draw, size, seed + 101, visual_world)
+    if scene_index == 0:
+        _draw_hero_reveal(draw, size, visual_world)
+
+    vignette = Image.new("RGBA", size, (0, 0, 0, 0))
+    vignette_draw = ImageDraw.Draw(vignette)
+    vignette_draw.rectangle((0, 0, width, 220), fill=(0, 0, 0, 65))
+    vignette_draw.rectangle((0, height - 260, width, height), fill=(0, 0, 0, 78))
+    vignette_draw.rounded_rectangle((26, 26, width - 26, height - 26), radius=38, outline=(255, 255, 255, 22), width=2)
 
     frame = Image.alpha_composite(bg, overlay)
-    frame = Image.alpha_composite(frame, dark_top)
+    frame = Image.alpha_composite(frame, vignette)
     draw = ImageDraw.Draw(frame)
 
     try:
-        label_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 34)
-        title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 88)
-        small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
+        label_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+        small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 30)
     except Exception:
         label_font = ImageFont.load_default()
-        title_font = ImageFont.load_default()
         small_font = ImageFont.load_default()
 
-    label = f"SCENE {scene_index + 1}"
-    draw.rounded_rectangle((72, 72, 310, 132), radius=26, fill=(255, 255, 255, 46))
-    draw.text((102, 88), label, font=label_font, fill="white")
-
-    wrapped_keyword = textwrap.fill((keyword or "TRENDING STORY").upper(), width=14)
-    title_lines = wrapped_keyword.split("\n")[:3]
-    y = 320
-    for line in title_lines:
-        bbox = draw.textbbox((0, 0), line, font=title_font, stroke_width=3)
-        line_w = bbox[2] - bbox[0]
-        x = (width - line_w) // 2
-        draw.text(
-            (x, y),
-            line,
-            font=title_font,
-            fill="white",
-            stroke_fill="black",
-            stroke_width=3,
-        )
-        y += (bbox[3] - bbox[1]) + 12
+    badge = "REVEAL" if scene_index == 0 else motif.upper()
+    badge_w = 86 + (len(badge) * 14)
+    draw.rounded_rectangle((58, 72, 58 + badge_w, 124), radius=22, fill=(255, 255, 255, 38))
+    draw.text((82, 85), badge, font=label_font, fill="white")
 
     descriptor = " ".join((visual_direction or keyword or "").split())[:80].upper()
     if descriptor:
-        descriptor = textwrap.shorten(descriptor, width=48, placeholder="...")
+        descriptor = textwrap.shorten(descriptor, width=42, placeholder="...")
         bbox = draw.textbbox((0, 0), descriptor, font=small_font)
         line_w = bbox[2] - bbox[0]
         x = (width - line_w) // 2
         draw.rounded_rectangle(
-            (x - 22, height - 260, x + line_w + 22, height - 202),
+            (x - 20, height - 170, x + line_w + 20, height - 118),
             radius=20,
-            fill=(255, 255, 255, 34),
+            fill=(255, 255, 255, 24),
         )
-        draw.text((x, height - 246), descriptor, font=small_font, fill="#FFE066")
+        draw.text((x, height - 158), descriptor, font=small_font, fill="#F7F2D0")
 
     return np.array(frame.convert("RGB"))
 
 
-def create_generated_scene_clip(keyword, visual_direction, duration, scene_index):
-    frame = create_generated_scene_frame(keyword, visual_direction, scene_index)
-    zoom_start = 1.0 + (0.01 * (scene_index % 3))
-    zoom_end = 1.08 + (0.015 * (scene_index % 4))
-    return build_motion_clip(frame, duration=duration, zoom_start=zoom_start, zoom_end=zoom_end, fade=0.08)
+def create_generated_scene_clip(keyword, visual_direction, duration, scene_index, visual_world=None):
+    frame = create_generated_scene_frame(
+        keyword,
+        visual_direction,
+        scene_index,
+        visual_world=visual_world,
+    )
+    motion_variants = [
+        "push_in",
+        "pan_left",
+        "pan_right",
+        "tilt_up",
+        "tilt_down",
+        "drift_left",
+        "drift_right",
+    ]
+    if scene_index == 0:
+        zoom_start = 1.04
+        zoom_end = 1.13
+        motion_variant = "push_in"
+    else:
+        zoom_start = 1.0 + (0.01 * (scene_index % 3))
+        zoom_end = 1.08 + (0.015 * (scene_index % 4))
+        motion_variant = motion_variants[(scene_index - 1) % len(motion_variants)]
+    return build_motion_clip(
+        frame,
+        duration=duration,
+        zoom_start=zoom_start,
+        zoom_end=zoom_end,
+        fade=0.08,
+        motion_variant=motion_variant,
+    )
 
 
 def build_scene_durations(target_duration, scene_count):
@@ -364,12 +567,58 @@ def save_video_assets(output_dir, content, video_prompt):
     return prompt_path, metadata_path
 
 
-def build_motion_clip(frame, duration, zoom_start=1.0, zoom_end=1.08, fade=0.2):
+def build_motion_clip(
+    frame,
+    duration,
+    zoom_start=1.0,
+    zoom_end=1.08,
+    fade=0.2,
+    motion_variant="zoom_in",
+    size=(1080, 1920),
+):
+    width, height = size
     clip = ImageClip(frame).set_duration(duration)
-    clip = clip.resize(lambda t: zoom_start + (zoom_end - zoom_start) * (t / duration))
+    max_zoom = max(zoom_start, zoom_end, 1.0)
+    animated = clip.resize(lambda t: zoom_start + (zoom_end - zoom_start) * (t / max(duration, 0.001)))
+
+    def position(t):
+        progress = min(max(t / max(duration, 0.001), 0), 1)
+        scaled_w = width * max_zoom
+        scaled_h = height * max_zoom
+        x_room = max(scaled_w - width, 0)
+        y_room = max(scaled_h - height, 0)
+
+        if motion_variant == "pan_left":
+            x = -x_room * progress
+            y = -y_room * 0.15
+        elif motion_variant == "pan_right":
+            x = -x_room * (1 - progress)
+            y = -y_room * 0.2
+        elif motion_variant == "tilt_up":
+            x = -x_room * 0.5
+            y = -y_room * progress
+        elif motion_variant == "tilt_down":
+            x = -x_room * 0.45
+            y = -y_room * (1 - progress)
+        elif motion_variant == "push_in":
+            x = -x_room * 0.5
+            y = -y_room * 0.5
+        elif motion_variant == "drift_left":
+            x = -x_room * (0.2 + (0.5 * progress))
+            y = -y_room * (0.35 + (0.15 * progress))
+        elif motion_variant == "drift_right":
+            x = -x_room * (0.65 - (0.35 * progress))
+            y = -y_room * (0.22 + (0.18 * progress))
+        else:
+            x = -x_room * 0.5
+            y = -y_room * 0.5
+        return (x, y)
+
+    moving = animated.set_position(position)
+    composed = CompositeVideoClip([moving], size=size).set_duration(duration)
     if fade:
-        clip = clip.fx(fadein, fade).fx(fadeout, fade)
-    return clip
+        composed = composed.fx(fadein, fade).fx(fadeout, fade)
+    return composed
 
 
 def has_pexels_access():
