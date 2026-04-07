@@ -4,11 +4,14 @@ import os
 import random
 import re
 import textwrap
+import time
 from io import BytesIO
 
 import numpy as np
 import requests
 from gtts import gTTS
+from google import genai
+from google.genai import types
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.audio.AudioClip import AudioArrayClip
 from moviepy.editor import (
@@ -34,6 +37,10 @@ ALLOW_STOCK_FALLBACK = os.environ.get("ALLOW_STOCK_FALLBACK", "false").strip().l
     "true",
     "yes",
 }
+VEO_MODEL = os.environ.get("VEO_MODEL", "veo-3.1-generate-preview")
+VEO_RESOLUTION = os.environ.get("VEO_RESOLUTION", "720p")
+VEO_DURATION_SECONDS = int(os.environ.get("VEO_DURATION_SECONDS", "4"))
+VEO_POLL_SECONDS = int(os.environ.get("VEO_POLL_SECONDS", "10"))
 
 
 def fetch_background_image(keyword):
@@ -62,6 +69,10 @@ def fetch_background_image(keyword):
     except Exception as e:
         print(f"Image fetch failed: {e}, using fallback")
         return Image.new("RGB", (1080, 1920), color=(30, 30, 50))
+
+
+def get_genai_client():
+    return genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
 
 def create_text_frame(
@@ -412,6 +423,64 @@ def _directional_motif(keyword, visual_direction):
     if any(term in text for term in ["event", "stage", "launch", "keynote", "announcement"]):
         return "stage"
     return "abstract"
+
+
+def build_veo_scene_prompt(scene_type, keyword, visual_direction, subtitle="", scene_index=0):
+    scene_type = (scene_type or "abstract").lower()
+    beat = " ".join((visual_direction or keyword or "").split())
+    subtitle = " ".join((subtitle or "").split())
+
+    cinematic_rules = (
+        "Create a cinematic vertical 9:16 shot with realistic lighting, premium camera movement, "
+        "high detail, filmic contrast, shallow depth of field where appropriate, and no text overlays."
+    )
+
+    scene_recipes = {
+        "hook": "Open with an immediate visual hook and a premium reveal moment.",
+        "product_reveal": "Show a dramatic product-style reveal with close details and sleek motion.",
+        "interface": "Show a modern app or interface scene with layered screen motion and futuristic UI energy.",
+        "reaction": "Show a believable human reaction shot with expressive body language and mood.",
+        "feature_demo": "Show a feature demonstration in action with clear visual cause and effect.",
+        "stage": "Show a keynote or launch-stage mood with presentation energy and spotlight lighting.",
+        "social_proof": "Show momentum, buzz, reactions, and a sense that many people are paying attention.",
+        "consequence": "Show the impact or next-step consequence of what just happened.",
+        "cta": "End on a bold, memorable cinematic final beat that feels like a short-form video closer.",
+        "abstract": "Show a stylized cinematic visual that matches the sentence without looking like a graphic card.",
+    }
+    recipe = scene_recipes.get(scene_type, scene_recipes["abstract"])
+
+    return (
+        f"{cinematic_rules} {recipe} "
+        f"Scene {scene_index + 1}. "
+        f"Primary concept: {keyword}. "
+        f"Story beat: {beat}. "
+        f"Emotional cue: {subtitle}. "
+        "No captions, no subtitles burned in, no floating info cards, no flat poster layout."
+    )
+
+
+def generate_veo_scene_video(prompt, output_path):
+    client = get_genai_client()
+    operation = client.models.generate_videos(
+        model=VEO_MODEL,
+        prompt=prompt,
+        config=types.GenerateVideosConfig(
+            aspect_ratio="9:16",
+            duration_seconds=VEO_DURATION_SECONDS,
+            resolution=VEO_RESOLUTION,
+            number_of_videos=1,
+        ),
+    )
+
+    while not operation.done:
+        print("Waiting for Veo scene generation...")
+        time.sleep(VEO_POLL_SECONDS)
+        operation = client.operations.get(operation)
+
+    generated_video = operation.response.generated_videos[0]
+    client.files.download(file=generated_video.video)
+    generated_video.video.save(output_path)
+    return output_path
 
 
 def _draw_hero_reveal(draw, size, visual_world):

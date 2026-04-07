@@ -11,13 +11,13 @@ from moviepy.editor import (
 )
 
 from create_video import (
-    _build_visual_world,
     create_background_music,
-    create_generated_scene_clip,
-    create_hud_overlay,
     create_subtitle_overlay,
     create_transition_flash,
     create_voiceover,
+    build_veo_scene_prompt,
+    fit_vertical_clip,
+    generate_veo_scene_video,
     split_sentences,
 )
 
@@ -153,47 +153,33 @@ def create_story_short(content):
     ]
     scene_durations = build_scene_durations(target_duration, spoken_beats)
 
+    generated_paths = []
     clips = []
-    lead_scene = scene_plan[0] if scene_plan else {}
-    visual_world = _build_visual_world(
-        lead_scene.get("visual_keyword") or content["topic"],
-        lead_scene.get("visual_direction") or content["title"],
-    )
     for index, scene in enumerate(scene_plan):
         scene_duration = scene_durations[index]
         keyword = scene.get("visual_keyword") or scene.get("visual_direction") or content["topic"]
         visual_direction = scene.get("visual_direction") or keyword
-        scene_type = (scene.get("scene_type") or "").lower()
-        combined_text = " ".join([keyword or "", visual_direction or ""]).lower()
-        if scene_type in {"interface", "feature_demo"}:
-            motif = "interface"
-        elif scene_type in {"product_reveal", "hook"}:
-            motif = "product"
-        elif scene_type in {"stage", "social_proof"}:
-            motif = "stage"
-        elif any(term in combined_text for term in ["interface", "screen", "ui", "display", "overlay", "app"]):
-            motif = "interface"
-        elif any(term in combined_text for term in ["product", "device", "phone", "glasses", "console", "controller"]):
-            motif = "product"
-        elif any(term in combined_text for term in ["event", "stage", "launch", "keynote", "announcement"]):
-            motif = "stage"
-        else:
-            motif = None
-        clip = create_generated_scene_clip(
-            keyword,
-            visual_direction,
-            scene_duration,
-            index,
-            visual_world=visual_world,
+        scene_type = (scene.get("scene_type") or "abstract").lower()
+        veo_prompt = build_veo_scene_prompt(
+            scene_type=scene_type,
+            keyword=keyword,
+            visual_direction=visual_direction,
+            subtitle=scene.get("subtitle") or "",
+            scene_index=index,
         )
+        scene_path = os.path.join(output_dir, f"story_scene_{index + 1}.mp4")
+        generated_paths.append(generate_veo_scene_video(veo_prompt, scene_path))
+
+    for index, scene_path in enumerate(generated_paths):
+        scene = scene_plan[index]
+        base_clip = VideoFileClip(scene_path)
+        scene_duration = scene_durations[index]
+        clip = fit_vertical_clip(base_clip, scene_duration)
         transition = scene.get("transition")
         clip = apply_transition_to_clip(clip, transition)
         subtitle = scene.get("subtitle") or content["hook"]
         subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
         layers = [clip, subtitle_clip]
-        hud_clip = create_hud_overlay(scene_duration, motif, visual_world)
-        if hud_clip is not None:
-            layers.append(hud_clip)
         flash_clip = build_transition_flash(transition, scene_duration)
         if flash_clip is not None:
             layers.append(flash_clip)
@@ -219,6 +205,9 @@ def create_story_short(content):
 
     for clip in clips:
         clip.close()
+    for path in generated_paths:
+        if os.path.exists(path):
+            os.remove(path)
     mixed_audio.close()
     voiceover.close()
     final_video.close()
