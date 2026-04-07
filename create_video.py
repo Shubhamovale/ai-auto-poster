@@ -10,6 +10,7 @@ import requests
 from gtts import gTTS
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.audio.AudioClip import AudioArrayClip
+from moviepy.audio.fx.all import audio_speedx
 from moviepy.editor import (
     AudioFileClip,
     CompositeAudioClip,
@@ -23,6 +24,9 @@ from moviepy.video.fx.fadeout import fadeout
 
 if not hasattr(Image, "ANTIALIAS"):
     Image.ANTIALIAS = Image.Resampling.LANCZOS
+
+
+VOICEOVER_SPEED = float(os.environ.get("VOICEOVER_SPEED", "1.12"))
 
 
 def fetch_background_image(keyword):
@@ -294,9 +298,9 @@ def create_elevenlabs_voiceover(script, output_path):
             "text": script,
             "model_id": "eleven_multilingual_v2",
             "voice_settings": {
-                "stability": 0.42,
-                "similarity_boost": 0.82,
-                "style": 0.28,
+                "stability": 0.36,
+                "similarity_boost": 0.84,
+                "style": 0.42,
                 "use_speaker_boost": True,
             },
         },
@@ -308,16 +312,31 @@ def create_elevenlabs_voiceover(script, output_path):
     return output_path
 
 
+def apply_voiceover_speed(output_path, speed=VOICEOVER_SPEED):
+    speed = float(speed or 1.0)
+    if abs(speed - 1.0) < 0.01:
+        return output_path
+
+    sped_path = os.path.splitext(output_path)[0] + "_sped.mp3"
+    clip = AudioFileClip(output_path)
+    sped_clip = clip.fx(audio_speedx, speed)
+    sped_clip.write_audiofile(sped_path, logger=None)
+    sped_clip.close()
+    clip.close()
+    return sped_path
+
+
 def create_voiceover(script, output_path):
     if has_elevenlabs_access():
         try:
             print("🎙️ Using ElevenLabs voiceover...")
-            return create_elevenlabs_voiceover(script, output_path)
+            generated_path = create_elevenlabs_voiceover(script, output_path)
+            return apply_voiceover_speed(generated_path)
         except Exception as e:
             print(f"ElevenLabs voiceover failed: {e}. Falling back to gTTS.")
 
     gTTS(text=script, lang="en", slow=False).save(output_path)
-    return output_path
+    return apply_voiceover_speed(output_path)
 
 
 def split_sentences(text):

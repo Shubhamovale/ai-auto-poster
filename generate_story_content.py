@@ -126,27 +126,126 @@ def _split_into_micro_beats(text):
     return beats
 
 
+def _extract_focus_terms(topic, content):
+    pool = " ".join(
+        [
+            topic,
+            content.get("title", ""),
+            content.get("hook", ""),
+            content.get("summary", ""),
+            " ".join(content.get("story_beats", [])),
+        ]
+    )
+    normalized = pool.lower()
+    mappings = [
+        ("apple", "apple product close up"),
+        ("iphone", "smartphone close up"),
+        ("tesla", "electric car detail"),
+        ("netflix", "streaming app interface"),
+        ("marvel", "cinematic superhero silhouette"),
+        ("youtube", "creator studio setup"),
+        ("instagram", "social media phone scroll"),
+        ("tiktok", "vertical video creator"),
+        ("playstation", "gaming console controller close up"),
+        ("xbox", "gaming console controller close up"),
+        ("openai", "ai interface screen"),
+        ("chatgpt", "ai chatbot interface"),
+        ("google", "tech keynote stage"),
+        ("meta", "ar glasses demo"),
+        ("vr", "virtual reality headset close up"),
+        ("ar", "augmented reality interface"),
+        ("ai", "futuristic ai interface"),
+        ("robot", "robotic hand close up"),
+        ("startup", "office team laptop"),
+        ("movie", "cinematic projector light"),
+        ("trailer", "dramatic cinema screen"),
+        ("gaming", "gamer rgb setup"),
+    ]
+    for trigger, replacement in mappings:
+        if trigger in normalized:
+            return replacement
+    return topic
+
+
+def _build_search_keyword(topic, focus_terms, beat, scene, index):
+    direction = " ".join(
+        [
+            scene.get("visual_keyword", ""),
+            scene.get("visual_direction", ""),
+            beat,
+        ]
+    ).lower()
+
+    if any(term in direction for term in ["close", "detail", "lens", "screen", "device", "product"]):
+        suffix = "close up detail portrait"
+    elif any(term in direction for term in ["reaction", "crowd", "fans", "people", "face"]):
+        suffix = "reaction portrait vertical"
+    elif any(term in direction for term in ["ui", "interface", "app", "overlay", "screen", "display"]):
+        suffix = "interface screen close up"
+    elif any(term in direction for term in ["launch", "event", "stage", "announcement", "keynote"]):
+        suffix = "event stage lights vertical"
+    elif any(term in direction for term in ["car", "drive", "vehicle"]):
+        suffix = "cinematic driving detail"
+    else:
+        dynamic_suffixes = [
+            "close up portrait",
+            "cinematic detail shot",
+            "reaction face portrait",
+            "interface screen close up",
+            "dramatic lighting close up",
+            "product reveal vertical",
+            "hands device close up",
+            "modern tech portrait",
+        ]
+        suffix = dynamic_suffixes[index % len(dynamic_suffixes)]
+
+    return " ".join([focus_terms, suffix]).strip()
+
+
+def _subtitle_from_beat(text, fallback):
+    cleaned = " ".join((text or fallback or "").split())
+    if not cleaned:
+        return "WATCH THIS"
+
+    patterns = [
+        (r"\b(shocking|wild|massive|huge|crazy|insane)\b", lambda m: m.group(1).upper()),
+        (r"\b(first look|big reveal|real reason|what happened|why now|just dropped)\b", lambda m: m.group(1).upper()),
+        (r"\b(\d+\s+\w+)\b", lambda m: m.group(1).upper()),
+    ]
+    for pattern, formatter in patterns:
+        match = re.search(pattern, cleaned, flags=re.IGNORECASE)
+        if match:
+            return formatter(match)
+
+    words = cleaned.split()
+    if len(words) >= 2:
+        return " ".join(words[: min(4, len(words))]).upper()
+    return cleaned.upper()
+
+
 def _build_default_scene_plan(topic, content):
     raw_lines = [content["hook"], content["summary"], *content["story_beats"]]
     lines = []
     for raw_line in raw_lines:
         lines.extend(_split_into_micro_beats(raw_line) or [raw_line])
+    focus_terms = _extract_focus_terms(topic, content)
     keywords = content["scene_keywords"]
     transitions = ["cut", "push", "cut", "flash", "slide", "cut", "zoom", "cut", "flash", "fade"]
     scene_count = min(max(len(lines), len(keywords), 8), 10)
     plan = []
     for index in range(scene_count):
         fallback_line = lines[index] if index < len(lines) else content["hook"]
-        keyword = keywords[index] if index < len(keywords) else topic
+        raw_keyword = keywords[index] if index < len(keywords) else topic
+        keyword = _build_search_keyword(topic, focus_terms, fallback_line, {"visual_keyword": raw_keyword}, index)
         plan.append(
             {
                 "line": _trim_line(fallback_line, content["hook"]),
-                "subtitle": _trim_subtitle(
+                "subtitle": _subtitle_from_beat(
                     content["subtitle_lines"][index] if index < len(content["subtitle_lines"]) else fallback_line,
                     fallback_line,
                 ),
                 "visual_keyword": keyword,
-                "visual_direction": keyword,
+                "visual_direction": raw_keyword,
                 "transition": transitions[index % len(transitions)],
             }
         )
@@ -205,23 +304,24 @@ def normalize_story_content(topic, topic_info, content):
             content["summary"],
             *content["story_beats"][:6],
         ]
-    content["subtitle_lines"] = [_trim_subtitle(line, content["hook"]) for line in subtitle_lines[:10]]
+    content["subtitle_lines"] = [_subtitle_from_beat(line, content["hook"]) for line in subtitle_lines[:10]]
 
     scene_plan = content.get("scene_plan") or []
     normalized_scene_plan = []
+    focus_terms = _extract_focus_terms(topic, content)
     for index, scene in enumerate(scene_plan[:10]):
         fallback_line = (
             scene.get("line")
             or scene.get("subtitle")
             or (content["story_beats"][index - 2] if index >= 2 and index - 2 < len(content["story_beats"]) else content["hook"])
         )
-        keyword = scene.get("visual_keyword") or scene.get("visual_direction") or topic
+        raw_keyword = scene.get("visual_keyword") or scene.get("visual_direction") or topic
         normalized_scene_plan.append(
             {
                 "line": _trim_line(scene.get("line"), fallback_line),
-                "subtitle": _trim_subtitle(scene.get("subtitle"), fallback_line),
-                "visual_keyword": keyword,
-                "visual_direction": scene.get("visual_direction") or keyword,
+                "subtitle": _subtitle_from_beat(scene.get("subtitle"), fallback_line),
+                "visual_keyword": _build_search_keyword(topic, focus_terms, fallback_line, scene, index),
+                "visual_direction": scene.get("visual_direction") or raw_keyword,
                 "transition": (scene.get("transition") or "cut").lower(),
             }
         )
@@ -232,11 +332,11 @@ def normalize_story_content(topic, topic_info, content):
             expanded_scene_plan.append(
                 {
                     "line": _trim_line(beat, scene["line"]),
-                    "subtitle": _trim_subtitle(
+                    "subtitle": _subtitle_from_beat(
                         scene["subtitle"] if beat_index == 0 else beat,
                         beat,
                     ),
-                    "visual_keyword": scene["visual_keyword"],
+                    "visual_keyword": _build_search_keyword(topic, focus_terms, beat, scene, beat_index),
                     "visual_direction": scene["visual_direction"],
                     "transition": scene["transition"],
                 }
