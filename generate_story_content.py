@@ -48,6 +48,7 @@ Return ONLY JSON with no extra text:
     {{
       "line": "spoken beat 1",
       "subtitle": "short caption 1",
+      "scene_type": "product_reveal",
       "visual_keyword": "specific stock video keyword 1",
       "visual_direction": "what should be visible in this scene",
       "transition": "cut"
@@ -55,6 +56,7 @@ Return ONLY JSON with no extra text:
     {{
       "line": "spoken beat 2",
       "subtitle": "short caption 2",
+      "scene_type": "interface",
       "visual_keyword": "specific stock video keyword 2",
       "visual_direction": "what should be visible in this scene",
       "transition": "push"
@@ -74,6 +76,7 @@ Rules:
 - Most lines should be 5 to 12 words.
 - Scene keywords must be visually searchable for stock footage.
 - Build `scene_plan` so each spoken beat has its own matching visual idea.
+- For every scene add a `scene_type` chosen from: hook, product_reveal, interface, reaction, feature_demo, stage, social_proof, consequence, abstract, cta.
 - Create 8 to 10 scenes so the visuals can change quickly with the speech.
 - Visual changes should feel frequent, roughly every 1 to 1.8 seconds.
 - Prefer tight closeups, action details, interface overlays, reaction shots, and product reveals over generic wide shots.
@@ -172,6 +175,7 @@ def _extract_focus_terms(topic, content):
 def _build_search_keyword(topic, focus_terms, beat, scene, index):
     direction = " ".join(
         [
+            scene.get("scene_type", ""),
             scene.get("visual_keyword", ""),
             scene.get("visual_direction", ""),
             beat,
@@ -202,6 +206,29 @@ def _build_search_keyword(topic, focus_terms, beat, scene, index):
         suffix = dynamic_suffixes[index % len(dynamic_suffixes)]
 
     return " ".join([focus_terms, suffix]).strip()
+
+
+def _classify_scene_type(line, subtitle="", visual_direction="", index=0, total=0):
+    text = " ".join([line or "", subtitle or "", visual_direction or ""]).lower()
+    if index == total - 1:
+        return "cta"
+    if index == 0:
+        return "hook"
+    if any(term in text for term in ["app", "interface", "screen", "ui", "display", "dashboard", "menu"]):
+        return "interface"
+    if any(term in text for term in ["phone", "device", "product", "glasses", "console", "controller", "launch"]):
+        return "product_reveal"
+    if any(term in text for term in ["reaction", "fans", "people", "crowd", "everyone", "users"]):
+        return "reaction"
+    if any(term in text for term in ["feature", "lets you", "can now", "comes with", "built for", "packed with"]):
+        return "feature_demo"
+    if any(term in text for term in ["stage", "event", "keynote", "announcement"]):
+        return "stage"
+    if any(term in text for term in ["viral", "trending", "millions", "huge", "online"]):
+        return "social_proof"
+    if any(term in text for term in ["problem", "change", "bigger", "means", "because", "next"]):
+        return "consequence"
+    return "abstract"
 
 
 def _subtitle_from_beat(text, fallback):
@@ -274,18 +301,30 @@ def _build_default_scene_plan(topic, content):
             fallback_line,
         )
 
+        scene_type = _classify_scene_type(line, subtitle, raw_keyword, index, scene_count)
+
         if index < 3:
             line = _boost_hook_line(line, index)
             subtitle = _boost_hook_subtitle(subtitle, index)
+            if index == 0:
+                scene_type = "hook"
         elif index == scene_count - 1:
             line = _viral_cta_line(content)
             subtitle = _viral_cta_subtitle()
+            scene_type = "cta"
 
-        keyword = _build_search_keyword(topic, focus_terms, fallback_line, {"visual_keyword": raw_keyword}, index)
+        keyword = _build_search_keyword(
+            topic,
+            focus_terms,
+            fallback_line,
+            {"visual_keyword": raw_keyword, "visual_direction": raw_keyword, "scene_type": scene_type},
+            index,
+        )
         plan.append(
             {
                 "line": line,
                 "subtitle": subtitle,
+                "scene_type": scene_type,
                 "visual_keyword": keyword,
                 "visual_direction": raw_keyword,
                 "transition": transitions[index % len(transitions)],
@@ -360,14 +399,34 @@ def normalize_story_content(topic, topic_info, content):
         raw_keyword = scene.get("visual_keyword") or scene.get("visual_direction") or topic
         line = _trim_line(scene.get("line"), fallback_line)
         subtitle = _subtitle_from_beat(scene.get("subtitle"), fallback_line)
+        scene_type = scene.get("scene_type") or _classify_scene_type(
+            line,
+            subtitle,
+            scene.get("visual_direction") or raw_keyword,
+            index,
+            len(scene_plan[:10]) or 10,
+        )
         if index < 3:
             line = _boost_hook_line(line, index)
             subtitle = _boost_hook_subtitle(subtitle, index)
+            if index == 0:
+                scene_type = "hook"
         normalized_scene_plan.append(
             {
                 "line": line,
                 "subtitle": subtitle,
-                "visual_keyword": _build_search_keyword(topic, focus_terms, fallback_line, scene, index),
+                "scene_type": scene_type,
+                "visual_keyword": _build_search_keyword(
+                    topic,
+                    focus_terms,
+                    fallback_line,
+                    {
+                        "scene_type": scene_type,
+                        "visual_keyword": scene.get("visual_keyword"),
+                        "visual_direction": scene.get("visual_direction"),
+                    },
+                    index,
+                ),
                 "visual_direction": scene.get("visual_direction") or raw_keyword,
                 "transition": (scene.get("transition") or "cut").lower(),
             }
@@ -376,6 +435,9 @@ def normalize_story_content(topic, topic_info, content):
     for scene in normalized_scene_plan:
         beats = _split_into_micro_beats(scene["line"]) or [scene["line"]]
         for beat_index, beat in enumerate(beats):
+            scene_type = scene["scene_type"]
+            if beat_index > 0 and scene_type == "hook":
+                scene_type = "consequence"
             expanded_scene_plan.append(
                 {
                     "line": _trim_line(beat, scene["line"]),
@@ -383,7 +445,18 @@ def normalize_story_content(topic, topic_info, content):
                         scene["subtitle"] if beat_index == 0 else beat,
                         beat,
                     ),
-                    "visual_keyword": _build_search_keyword(topic, focus_terms, beat, scene, beat_index),
+                    "scene_type": scene_type,
+                    "visual_keyword": _build_search_keyword(
+                        topic,
+                        focus_terms,
+                        beat,
+                        {
+                            "scene_type": scene_type,
+                            "visual_keyword": scene["visual_keyword"],
+                            "visual_direction": scene["visual_direction"],
+                        },
+                        beat_index,
+                    ),
                     "visual_direction": scene["visual_direction"],
                     "transition": scene["transition"],
                 }
@@ -402,6 +475,7 @@ def normalize_story_content(topic, topic_info, content):
         last_index = len(content["scene_plan"]) - 1
         content["scene_plan"][last_index]["line"] = _viral_cta_line(content)
         content["scene_plan"][last_index]["subtitle"] = _viral_cta_subtitle()
+        content["scene_plan"][last_index]["scene_type"] = "cta"
         content["scene_plan"][last_index]["visual_keyword"] = _build_search_keyword(
             topic,
             focus_terms,

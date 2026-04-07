@@ -163,8 +163,15 @@ def create_story_short(content):
         scene_duration = scene_durations[index]
         keyword = scene.get("visual_keyword") or scene.get("visual_direction") or content["topic"]
         visual_direction = scene.get("visual_direction") or keyword
+        scene_type = (scene.get("scene_type") or "").lower()
         combined_text = " ".join([keyword or "", visual_direction or ""]).lower()
-        if any(term in combined_text for term in ["interface", "screen", "ui", "display", "overlay", "app"]):
+        if scene_type in {"interface", "feature_demo"}:
+            motif = "interface"
+        elif scene_type in {"product_reveal", "hook"}:
+            motif = "product"
+        elif scene_type in {"stage", "social_proof"}:
+            motif = "stage"
+        elif any(term in combined_text for term in ["interface", "screen", "ui", "display", "overlay", "app"]):
             motif = "interface"
         elif any(term in combined_text for term in ["product", "device", "phone", "glasses", "console", "controller"]):
             motif = "product"
@@ -183,7 +190,7 @@ def create_story_short(content):
         clip = apply_transition_to_clip(clip, transition)
         subtitle = scene.get("subtitle") or content["hook"]
         subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
-        layers = [clip, subtitle_clip.set_position(("center", "bottom"))]
+        layers = [clip, subtitle_clip]
         hud_clip = create_hud_overlay(scene_duration, motif, visual_world)
         if hud_clip is not None:
             layers.append(hud_clip)
