@@ -12,7 +12,10 @@ from moviepy.editor import (
 )
 
 from create_video import (
+    _build_visual_world,
     create_background_music,
+    create_generated_scene_clip,
+    create_hud_overlay,
     create_subtitle_overlay,
     create_transition_flash,
     create_voiceover,
@@ -23,6 +26,7 @@ from create_video import (
 )
 
 VEO_SCENE_COUNT = int(os.environ.get("VEO_SCENE_COUNT", "3"))
+SHORTS_RENDER_MODE = os.environ.get("SHORTS_RENDER_MODE", "generated").strip().lower()
 
 
 def build_scene_durations(total_duration, spoken_beats):
@@ -102,6 +106,153 @@ def build_group_prompt(group, scene_index):
         subtitle=subtitle,
         scene_index=scene_index,
     )
+
+
+def scene_motif(scene):
+    scene_type = (scene.get("scene_type") or "").lower()
+    combined_text = " ".join(
+        [
+            scene.get("visual_keyword") or "",
+            scene.get("visual_direction") or "",
+            scene.get("line") or "",
+        ]
+    ).lower()
+    if scene_type in {"interface", "feature_demo"}:
+        return "interface"
+    if scene_type in {"product_reveal", "hook"}:
+        return "product"
+    if scene_type in {"stage", "social_proof"}:
+        return "stage"
+    if any(term in combined_text for term in ["interface", "screen", "ui", "display", "overlay", "app"]):
+        return "interface"
+    if any(term in combined_text for term in ["product", "device", "phone", "glasses", "console", "controller"]):
+        return "product"
+    if any(term in combined_text for term in ["event", "stage", "launch", "keynote", "announcement"]):
+        return "stage"
+    return None
+
+
+def render_generated_story_short(content, scene_plan, scene_durations, output_dir, target_duration, voiceover):
+    clips = []
+    lead_scene = scene_plan[0] if scene_plan else {}
+    visual_world = _build_visual_world(
+        lead_scene.get("visual_keyword") or content["topic"],
+        lead_scene.get("visual_direction") or content["title"],
+    )
+
+    for index, scene in enumerate(scene_plan):
+        scene_duration = scene_durations[index]
+        keyword = scene.get("visual_keyword") or scene.get("visual_direction") or content["topic"]
+        visual_direction = scene.get("visual_direction") or keyword
+        clip = create_generated_scene_clip(
+            keyword,
+            visual_direction,
+            scene_duration,
+            index,
+            visual_world=visual_world,
+        )
+        transition = scene.get("transition")
+        clip = apply_transition_to_clip(clip, transition)
+        subtitle = scene.get("subtitle") or content["hook"]
+        subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
+        layers = [clip, subtitle_clip]
+        hud_clip = create_hud_overlay(scene_duration, scene_motif(scene), visual_world)
+        if hud_clip is not None:
+            layers.append(hud_clip)
+        flash_clip = build_transition_flash(transition, scene_duration)
+        if flash_clip is not None:
+            layers.append(flash_clip)
+        composed = CompositeVideoClip(layers).set_duration(scene_duration)
+        clips.append(composed)
+
+    final_video = concatenate_videoclips(clips, method="compose").set_duration(target_duration)
+    voice_track = voiceover.set_start(0).volumex(1.0)
+    music = create_background_music(target_duration).set_duration(target_duration).volumex(0.16)
+    mixed_audio = CompositeAudioClip([music, voice_track]).set_duration(target_duration)
+    final_video = final_video.set_audio(mixed_audio)
+
+    output_path = os.path.join(output_dir, "story_short.mp4")
+    final_video.write_videofile(
+        output_path,
+        fps=30,
+        codec="libx264",
+        audio_codec="aac",
+        temp_audiofile=os.path.join(output_dir, "story_temp_audio.m4a"),
+        remove_temp=True,
+        logger=None,
+    )
+
+    for clip in clips:
+        clip.close()
+    mixed_audio.close()
+    final_video.close()
+    return output_path
+
+
+def render_veo_story_short(content, scene_plan, scene_durations, output_dir, target_duration, voiceover):
+    scene_groups = group_story_scenes(scene_plan, scene_durations, VEO_SCENE_COUNT)
+    generated_paths = []
+    clips = []
+
+    for index, group in enumerate(scene_groups):
+        veo_prompt = build_group_prompt(group, index)
+        scene_path = os.path.join(output_dir, f"story_scene_group_{index + 1}.mp4")
+        generated_paths.append(generate_veo_scene_video(veo_prompt, scene_path))
+
+    for group, scene_path in zip(scene_groups, generated_paths):
+        base_clip = VideoFileClip(scene_path)
+        group_scene_count = len(group["scenes"])
+        clip_duration = max(float(base_clip.duration or 0), 0.1)
+        segment_length = clip_duration / max(group_scene_count, 1)
+
+        for local_index, scene in enumerate(group["scenes"]):
+            scene_duration = group["durations"][local_index]
+            start = min(segment_length * local_index, max(clip_duration - 0.05, 0))
+            end = min(clip_duration, start + segment_length)
+            if end - start < 0.2:
+                start = 0
+                end = clip_duration
+
+            segment_clip = base_clip.subclip(start, end)
+            clip = fit_vertical_clip(segment_clip, scene_duration)
+            transition = scene.get("transition")
+            clip = apply_transition_to_clip(clip, transition)
+            subtitle = scene.get("subtitle") or content["hook"]
+            subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
+            layers = [clip, subtitle_clip]
+            flash_clip = build_transition_flash(transition, scene_duration)
+            if flash_clip is not None:
+                layers.append(flash_clip)
+            composed = CompositeVideoClip(layers).set_duration(scene_duration)
+            clips.append(composed)
+
+        base_clip.close()
+
+    final_video = concatenate_videoclips(clips, method="compose").set_duration(target_duration)
+    voice_track = voiceover.set_start(0).volumex(1.0)
+    music = create_background_music(target_duration).set_duration(target_duration).volumex(0.16)
+    mixed_audio = CompositeAudioClip([music, voice_track]).set_duration(target_duration)
+    final_video = final_video.set_audio(mixed_audio)
+
+    output_path = os.path.join(output_dir, "story_short.mp4")
+    final_video.write_videofile(
+        output_path,
+        fps=30,
+        codec="libx264",
+        audio_codec="aac",
+        temp_audiofile=os.path.join(output_dir, "story_temp_audio.m4a"),
+        remove_temp=True,
+        logger=None,
+    )
+
+    for clip in clips:
+        clip.close()
+    for path in generated_paths:
+        if os.path.exists(path):
+            os.remove(path)
+    mixed_audio.close()
+    final_video.close()
+    return output_path
 
 
 def normalize_scene_plan(content):
@@ -212,68 +363,25 @@ def create_story_short(content):
         for item in scene_plan
     ]
     scene_durations = build_scene_durations(target_duration, spoken_beats)
-    scene_groups = group_story_scenes(scene_plan, scene_durations, VEO_SCENE_COUNT)
+    if SHORTS_RENDER_MODE == "veo":
+        output_path = render_veo_story_short(
+            content,
+            scene_plan,
+            scene_durations,
+            output_dir,
+            target_duration,
+            voiceover,
+        )
+    else:
+        output_path = render_generated_story_short(
+            content,
+            scene_plan,
+            scene_durations,
+            output_dir,
+            target_duration,
+            voiceover,
+        )
 
-    generated_paths = []
-    clips = []
-    for index, group in enumerate(scene_groups):
-        veo_prompt = build_group_prompt(group, index)
-        scene_path = os.path.join(output_dir, f"story_scene_group_{index + 1}.mp4")
-        generated_paths.append(generate_veo_scene_video(veo_prompt, scene_path))
-
-    for group, scene_path in zip(scene_groups, generated_paths):
-        base_clip = VideoFileClip(scene_path)
-        group_scene_count = len(group["scenes"])
-        clip_duration = max(float(base_clip.duration or 0), 0.1)
-        segment_length = clip_duration / max(group_scene_count, 1)
-
-        for local_index, scene in enumerate(group["scenes"]):
-            scene_duration = group["durations"][local_index]
-            start = min(segment_length * local_index, max(clip_duration - 0.05, 0))
-            end = min(clip_duration, start + segment_length)
-            if end - start < 0.2:
-                start = 0
-                end = clip_duration
-
-            segment_clip = base_clip.subclip(start, end)
-            clip = fit_vertical_clip(segment_clip, scene_duration)
-            transition = scene.get("transition")
-            clip = apply_transition_to_clip(clip, transition)
-            subtitle = scene.get("subtitle") or content["hook"]
-            subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
-            layers = [clip, subtitle_clip]
-            flash_clip = build_transition_flash(transition, scene_duration)
-            if flash_clip is not None:
-                layers.append(flash_clip)
-            composed = CompositeVideoClip(layers).set_duration(scene_duration)
-            clips.append(composed)
-
-        base_clip.close()
-
-    final_video = concatenate_videoclips(clips, method="compose").set_duration(target_duration)
-    voiceover = voiceover.set_start(0).volumex(1.0)
-    music = create_background_music(target_duration).set_duration(target_duration).volumex(0.16)
-    mixed_audio = CompositeAudioClip([music, voiceover]).set_duration(target_duration)
-    final_video = final_video.set_audio(mixed_audio)
-
-    output_path = os.path.join(output_dir, "story_short.mp4")
-    final_video.write_videofile(
-        output_path,
-        fps=30,
-        codec="libx264",
-        audio_codec="aac",
-        temp_audiofile=os.path.join(output_dir, "story_temp_audio.m4a"),
-        remove_temp=True,
-        logger=None,
-    )
-
-    for clip in clips:
-        clip.close()
-    for path in generated_paths:
-        if os.path.exists(path):
-            os.remove(path)
-    mixed_audio.close()
     voiceover.close()
-    final_video.close()
 
     return output_path, metadata_path, script_path, outline_path
