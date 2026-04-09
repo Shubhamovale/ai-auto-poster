@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import math
 
 from moviepy.editor import (
     AudioFileClip,
@@ -20,6 +21,8 @@ from create_video import (
     generate_veo_scene_video,
     split_sentences,
 )
+
+VEO_SCENE_COUNT = int(os.environ.get("VEO_SCENE_COUNT", "3"))
 
 
 def build_scene_durations(total_duration, spoken_beats):
@@ -42,6 +45,63 @@ def build_scene_durations(total_duration, spoken_beats):
         scale = total_duration / sum(durations)
         durations = [duration * scale for duration in durations]
     return durations
+
+
+def group_story_scenes(scene_plan, scene_durations, target_groups):
+    scene_count = len(scene_plan)
+    if scene_count == 0:
+        return []
+
+    target_groups = max(1, min(target_groups, scene_count))
+    beats_per_group = math.ceil(scene_count / target_groups)
+    groups = []
+    for start in range(0, scene_count, beats_per_group):
+        end = min(start + beats_per_group, scene_count)
+        groups.append(
+            {
+                "start": start,
+                "end": end,
+                "scenes": scene_plan[start:end],
+                "durations": scene_durations[start:end],
+            }
+        )
+    return groups
+
+
+def build_group_prompt(group, scene_index):
+    scenes = group["scenes"]
+    primary = scenes[0]
+    scene_types = [scene.get("scene_type") or "abstract" for scene in scenes]
+    group_scene_type = scene_types[0]
+    if "cta" in scene_types:
+        group_scene_type = "cta"
+    elif "hook" in scene_types:
+        group_scene_type = "hook"
+    elif "product_reveal" in scene_types:
+        group_scene_type = "product_reveal"
+    elif "interface" in scene_types or "feature_demo" in scene_types:
+        group_scene_type = "interface"
+
+    beat_text = " ".join(
+        " ".join((scene.get("line") or scene.get("subtitle") or "").split())
+        for scene in scenes
+    )
+    visual_direction = " ".join(
+        " ".join((scene.get("visual_direction") or scene.get("visual_keyword") or "").split())
+        for scene in scenes
+    )
+    subtitle = " / ".join(
+        " ".join((scene.get("subtitle") or "").split())
+        for scene in scenes
+    )
+    keyword = primary.get("visual_keyword") or primary.get("visual_direction") or beat_text
+    return build_veo_scene_prompt(
+        scene_type=group_scene_type,
+        keyword=keyword,
+        visual_direction=f"{visual_direction}. Story flow: {beat_text}",
+        subtitle=subtitle,
+        scene_index=scene_index,
+    )
 
 
 def normalize_scene_plan(content):
@@ -152,39 +212,43 @@ def create_story_short(content):
         for item in scene_plan
     ]
     scene_durations = build_scene_durations(target_duration, spoken_beats)
+    scene_groups = group_story_scenes(scene_plan, scene_durations, VEO_SCENE_COUNT)
 
     generated_paths = []
     clips = []
-    for index, scene in enumerate(scene_plan):
-        scene_duration = scene_durations[index]
-        keyword = scene.get("visual_keyword") or scene.get("visual_direction") or content["topic"]
-        visual_direction = scene.get("visual_direction") or keyword
-        scene_type = (scene.get("scene_type") or "abstract").lower()
-        veo_prompt = build_veo_scene_prompt(
-            scene_type=scene_type,
-            keyword=keyword,
-            visual_direction=visual_direction,
-            subtitle=scene.get("subtitle") or "",
-            scene_index=index,
-        )
-        scene_path = os.path.join(output_dir, f"story_scene_{index + 1}.mp4")
+    for index, group in enumerate(scene_groups):
+        veo_prompt = build_group_prompt(group, index)
+        scene_path = os.path.join(output_dir, f"story_scene_group_{index + 1}.mp4")
         generated_paths.append(generate_veo_scene_video(veo_prompt, scene_path))
 
-    for index, scene_path in enumerate(generated_paths):
-        scene = scene_plan[index]
+    for group, scene_path in zip(scene_groups, generated_paths):
         base_clip = VideoFileClip(scene_path)
-        scene_duration = scene_durations[index]
-        clip = fit_vertical_clip(base_clip, scene_duration)
-        transition = scene.get("transition")
-        clip = apply_transition_to_clip(clip, transition)
-        subtitle = scene.get("subtitle") or content["hook"]
-        subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
-        layers = [clip, subtitle_clip]
-        flash_clip = build_transition_flash(transition, scene_duration)
-        if flash_clip is not None:
-            layers.append(flash_clip)
-        composed = CompositeVideoClip(layers).set_duration(scene_duration)
-        clips.append(composed)
+        group_scene_count = len(group["scenes"])
+        clip_duration = max(float(base_clip.duration or 0), 0.1)
+        segment_length = clip_duration / max(group_scene_count, 1)
+
+        for local_index, scene in enumerate(group["scenes"]):
+            scene_duration = group["durations"][local_index]
+            start = min(segment_length * local_index, max(clip_duration - 0.05, 0))
+            end = min(clip_duration, start + segment_length)
+            if end - start < 0.2:
+                start = 0
+                end = clip_duration
+
+            segment_clip = base_clip.subclip(start, end)
+            clip = fit_vertical_clip(segment_clip, scene_duration)
+            transition = scene.get("transition")
+            clip = apply_transition_to_clip(clip, transition)
+            subtitle = scene.get("subtitle") or content["hook"]
+            subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
+            layers = [clip, subtitle_clip]
+            flash_clip = build_transition_flash(transition, scene_duration)
+            if flash_clip is not None:
+                layers.append(flash_clip)
+            composed = CompositeVideoClip(layers).set_duration(scene_duration)
+            clips.append(composed)
+
+        base_clip.close()
 
     final_video = concatenate_videoclips(clips, method="compose").set_duration(target_duration)
     voiceover = voiceover.set_start(0).volumex(1.0)
