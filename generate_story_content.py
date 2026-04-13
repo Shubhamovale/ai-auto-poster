@@ -5,9 +5,15 @@ import time
 
 from google import genai
 from google.genai import errors
+import requests
 from trending_topics import get_random_topic
 
 
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
+OPENAI_CONTENT_MODEL = os.environ.get("OPENAI_CONTENT_MODEL", "gpt-4o-mini")
+OPENAI_MAX_RETRIES = int(os.environ.get("OPENAI_MAX_RETRIES", "3"))
+OPENAI_RETRY_BASE_SECONDS = int(os.environ.get("OPENAI_RETRY_BASE_SECONDS", "5"))
+OPENAI_TIMEOUT_SECONDS = int(os.environ.get("OPENAI_TIMEOUT_SECONDS", "90"))
 GEMINI_CONTENT_MODEL = os.environ.get("GEMINI_CONTENT_MODEL", "models/gemini-2.5-flash")
 GEMINI_MAX_RETRIES = int(os.environ.get("GEMINI_MAX_RETRIES", "4"))
 GEMINI_RETRY_BASE_SECONDS = int(os.environ.get("GEMINI_RETRY_BASE_SECONDS", "6"))
@@ -509,10 +515,76 @@ def normalize_story_content(topic, topic_info, content):
     return content
 
 
-def generate_story_content():
+def _extract_openai_output_text(response_json):
+    output_text = " ".join((response_json.get("output_text") or "").split())
+    if output_text:
+        return output_text
+
+    chunks = []
+    for item in response_json.get("output", []):
+        for content_item in item.get("content", []):
+            text = content_item.get("text")
+            if text:
+                chunks.append(text)
+    return "\n".join(chunks).strip()
+
+
+def _generate_story_content_with_openai(topic):
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": OPENAI_CONTENT_MODEL,
+        "input": [
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": "You create structured YouTube Shorts story packages. Return valid JSON only.",
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": build_story_prompt(topic)}],
+            },
+        ],
+        "text": {"format": {"type": "json_object"}},
+    }
+
+    last_error = None
+    for attempt in range(1, OPENAI_MAX_RETRIES + 1):
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/responses",
+                headers=headers,
+                json=payload,
+                timeout=OPENAI_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            response_json = response.json()
+            text = _extract_openai_output_text(response_json)
+            if not text:
+                raise RuntimeError("OpenAI response did not contain any output text.")
+            return json.loads(text)
+        except (requests.RequestException, json.JSONDecodeError, RuntimeError) as exc:
+            last_error = exc
+            if attempt == OPENAI_MAX_RETRIES:
+                raise
+            wait_seconds = OPENAI_RETRY_BASE_SECONDS * attempt
+            print(
+                f"OpenAI content generation failed on attempt {attempt}/"
+                f"{OPENAI_MAX_RETRIES}. Retrying in {wait_seconds}s..."
+            )
+            time.sleep(wait_seconds)
+
+    raise last_error or RuntimeError("OpenAI content generation failed without an exception.")
+
+
+def _generate_story_content_with_gemini(topic):
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    topic_info = get_random_topic()
-    topic = topic_info["topic"]
 
     response = None
     last_error = None
@@ -539,5 +611,34 @@ def generate_story_content():
 
     text = response.text.strip()
     text = text.replace("```json", "").replace("```", "").strip()
-    content = json.loads(text)
-    return normalize_story_content(topic, topic_info, content)
+    return json.loads(text)
+
+
+def generate_story_content():
+    topic_info = get_random_topic()
+    topic = topic_info["topic"]
+
+    content = None
+    openai_error = None
+    if OPENAI_API_KEY:
+        try:
+            print(f"Using OpenAI model {OPENAI_CONTENT_MODEL} for story generation...")
+            content = _generate_story_content_with_openai(topic)
+        except Exception as exc:
+            openai_error = exc
+            print(
+                f"OpenAI story generation failed ({type(exc).__name__}: {exc}). "
+                "Falling back to Gemini..."
+            )
+
+    if content is None:
+        content = _generate_story_content_with_gemini(topic)
+
+    try:
+        return normalize_story_content(topic, topic_info, content)
+    except Exception:
+        if openai_error is not None:
+            raise RuntimeError(
+                f"Story generation failed to normalize after OpenAI fallback attempt: {openai_error}"
+            )
+        raise
