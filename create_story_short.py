@@ -13,20 +13,23 @@ from moviepy.editor import (
 
 from create_video import (
     _build_visual_world,
+    build_motion_clip,
     create_background_music,
     create_generated_scene_clip,
     create_hud_overlay,
     create_subtitle_overlay,
     create_transition_flash,
+    create_text_frame,
     create_voiceover,
     build_veo_scene_prompt,
+    fetch_background_image,
     fit_vertical_clip,
     generate_veo_scene_video,
     split_sentences,
 )
 
 VEO_SCENE_COUNT = int(os.environ.get("VEO_SCENE_COUNT", "3"))
-SHORTS_RENDER_MODE = os.environ.get("SHORTS_RENDER_MODE", "generated").strip().lower()
+SHORTS_RENDER_MODE = os.environ.get("SHORTS_RENDER_MODE", "slides").strip().lower()
 
 
 def build_scene_durations(total_duration, spoken_beats):
@@ -159,6 +162,72 @@ def render_generated_story_short(content, scene_plan, scene_durations, output_di
         hud_clip = create_hud_overlay(scene_duration, scene_motif(scene), visual_world)
         if hud_clip is not None:
             layers.append(hud_clip)
+        flash_clip = build_transition_flash(transition, scene_duration)
+        if flash_clip is not None:
+            layers.append(flash_clip)
+        composed = CompositeVideoClip(layers).set_duration(scene_duration)
+        clips.append(composed)
+
+    final_video = concatenate_videoclips(clips, method="compose").set_duration(target_duration)
+    voice_track = voiceover.set_start(0).volumex(1.0)
+    music = create_background_music(target_duration).set_duration(target_duration).volumex(0.16)
+    mixed_audio = CompositeAudioClip([music, voice_track]).set_duration(target_duration)
+    final_video = final_video.set_audio(mixed_audio)
+
+    output_path = os.path.join(output_dir, "story_short.mp4")
+    final_video.write_videofile(
+        output_path,
+        fps=30,
+        codec="libx264",
+        audio_codec="aac",
+        temp_audiofile=os.path.join(output_dir, "story_temp_audio.m4a"),
+        remove_temp=True,
+        logger=None,
+    )
+
+    for clip in clips:
+        clip.close()
+    mixed_audio.close()
+    final_video.close()
+    return output_path
+
+
+def render_slide_story_short(content, scene_plan, scene_durations, output_dir, target_duration, voiceover):
+    clips = []
+    background = fetch_background_image(content.get("topic") or content.get("title") or "technology")
+    accent_colors = [
+        (255, 77, 109),
+        (255, 209, 102),
+        (6, 214, 160),
+        (76, 201, 240),
+    ]
+
+    for index, scene in enumerate(scene_plan):
+        scene_duration = scene_durations[index]
+        subtitle = scene.get("subtitle") or content["hook"]
+        line = scene.get("line") or subtitle
+        layout = "hook" if index == 0 or (scene.get("scene_type") == "cta") else "standard"
+        accent_color = accent_colors[index % len(accent_colors)]
+        text_frame = create_text_frame(
+            background,
+            subtitle,
+            subtitle=line,
+            text_color="white" if index != 0 else "#FFD700",
+            font_size=84 if index == 0 else 72,
+            accent_color=accent_color,
+            layout=layout,
+        )
+        slide_clip = build_motion_clip(
+            text_frame,
+            duration=scene_duration,
+            zoom_start=1.0 if index else 1.03,
+            zoom_end=1.06 if index else 1.12,
+            fade=0.12,
+        )
+        transition = scene.get("transition")
+        slide_clip = apply_transition_to_clip(slide_clip, transition)
+        subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
+        layers = [slide_clip, subtitle_clip]
         flash_clip = build_transition_flash(transition, scene_duration)
         if flash_clip is not None:
             layers.append(flash_clip)
@@ -372,8 +441,17 @@ def create_story_short(content):
             target_duration,
             voiceover,
         )
-    else:
+    elif SHORTS_RENDER_MODE == "generated":
         output_path = render_generated_story_short(
+            content,
+            scene_plan,
+            scene_durations,
+            output_dir,
+            target_duration,
+            voiceover,
+        )
+    else:
+        output_path = render_slide_story_short(
             content,
             scene_plan,
             scene_durations,
