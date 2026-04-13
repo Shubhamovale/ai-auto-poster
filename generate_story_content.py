@@ -1,9 +1,16 @@
 import json
 import os
 import re
+import time
 
 from google import genai
+from google.genai import errors
 from trending_topics import get_random_topic
+
+
+GEMINI_CONTENT_MODEL = os.environ.get("GEMINI_CONTENT_MODEL", "models/gemini-2.5-flash")
+GEMINI_MAX_RETRIES = int(os.environ.get("GEMINI_MAX_RETRIES", "4"))
+GEMINI_RETRY_BASE_SECONDS = int(os.environ.get("GEMINI_RETRY_BASE_SECONDS", "6"))
 
 
 def build_story_prompt(topic):
@@ -507,10 +514,28 @@ def generate_story_content():
     topic_info = get_random_topic()
     topic = topic_info["topic"]
 
-    response = client.models.generate_content(
-        model="models/gemini-2.5-flash",
-        contents=build_story_prompt(topic),
-    )
+    response = None
+    last_error = None
+    for attempt in range(1, GEMINI_MAX_RETRIES + 1):
+        try:
+            response = client.models.generate_content(
+                model=GEMINI_CONTENT_MODEL,
+                contents=build_story_prompt(topic),
+            )
+            break
+        except errors.ServerError as exc:
+            last_error = exc
+            if attempt == GEMINI_MAX_RETRIES:
+                raise
+            wait_seconds = GEMINI_RETRY_BASE_SECONDS * attempt
+            print(
+                f"Gemini content generation unavailable on attempt {attempt}/"
+                f"{GEMINI_MAX_RETRIES}. Retrying in {wait_seconds}s..."
+            )
+            time.sleep(wait_seconds)
+
+    if response is None:
+        raise last_error or RuntimeError("Gemini content generation failed without a response.")
 
     text = response.text.strip()
     text = text.replace("```json", "").replace("```", "").strip()
