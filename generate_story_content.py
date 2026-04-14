@@ -614,12 +614,69 @@ def _generate_story_content_with_gemini(topic):
     return json.loads(text)
 
 
+def _generate_story_content_from_template(topic):
+    clean_topic = " ".join((topic or "This story").split())
+    summary = f"{clean_topic} is trending right now and pulling people in fast."
+    story_beats = [
+        f"{clean_topic} just popped off online.",
+        "The reaction started building almost immediately.",
+        "People are sharing clips and breaking down the details.",
+        "Every new update is making the story feel bigger.",
+        "Now more viewers are jumping in to see what happened.",
+        "The conversation keeps getting louder across platforms.",
+        "This is turning into one of those stories people binge fast.",
+        "And it still feels like there is more to come.",
+    ]
+    subtitle_lines = [
+        "JUST DROPPED",
+        "REACTION STARTS",
+        "CLIPS EVERYWHERE",
+        "GETTING BIGGER",
+        "MORE PEOPLE WATCH",
+        "LOUDER ONLINE",
+        "BINGE THIS",
+        "MORE TO COME",
+    ]
+    return {
+        "title": clean_topic[:60],
+        "hook": f"Wait, {clean_topic} is blowing up fast.",
+        "summary": summary,
+        "story_beats": story_beats,
+        "voiceover_script": " ".join(
+            [
+                f"Wait, {clean_topic} is blowing up fast.",
+                summary,
+                *story_beats,
+                "Would you watch this? Follow for part two.",
+            ]
+        ),
+        "scene_keywords": [
+            clean_topic,
+            f"{clean_topic} reaction",
+            f"{clean_topic} close up",
+            f"{clean_topic} online buzz",
+            f"{clean_topic} dramatic reveal",
+            f"{clean_topic} audience reaction",
+            f"{clean_topic} trending feed",
+            f"{clean_topic} finale",
+        ],
+        "subtitle_lines": subtitle_lines,
+        "scene_plan": [],
+        "youtube_description": (
+            f"{summary} This short breaks down why {clean_topic} is moving so fast online. "
+            "#shorts #trending #viral"
+        ),
+        "youtube_tags": ["Shorts", "Trending", "Viral", "Story", "News"],
+    }
+
+
 def generate_story_content():
     topic_info = get_random_topic()
     topic = topic_info["topic"]
 
     content = None
     openai_error = None
+    gemini_error = None
     if OPENAI_API_KEY:
         try:
             print(f"Using OpenAI model {OPENAI_CONTENT_MODEL} for story generation...")
@@ -632,7 +689,15 @@ def generate_story_content():
             )
 
     if content is None:
-        content = _generate_story_content_with_gemini(topic)
+        try:
+            content = _generate_story_content_with_gemini(topic)
+        except Exception as exc:
+            gemini_error = exc
+            print(
+                f"Gemini story generation failed ({type(exc).__name__}: {exc}). "
+                "Using template fallback story package..."
+            )
+            content = _generate_story_content_from_template(topic)
 
     try:
         return normalize_story_content(topic, topic_info, content)
@@ -640,5 +705,9 @@ def generate_story_content():
         if openai_error is not None:
             raise RuntimeError(
                 f"Story generation failed to normalize after OpenAI fallback attempt: {openai_error}"
+            )
+        if gemini_error is not None:
+            raise RuntimeError(
+                f"Story generation failed to normalize after Gemini fallback attempt: {gemini_error}"
             )
         raise
