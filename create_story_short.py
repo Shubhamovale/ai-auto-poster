@@ -32,25 +32,35 @@ VEO_SCENE_COUNT = int(os.environ.get("VEO_SCENE_COUNT", "3"))
 SHORTS_RENDER_MODE = os.environ.get("SHORTS_RENDER_MODE", "slides").strip().lower()
 
 
-def build_scene_durations(total_duration, spoken_beats):
+def build_scene_durations(total_duration, spoken_beats, end_pad=0.0):
     scene_count = max(len(spoken_beats), 1)
-    word_counts = [max(2, len(re.findall(r"\w+", beat))) for beat in spoken_beats]
+    end_pad = max(0.0, float(end_pad or 0.0))
+    spoken_duration = max(0.1, float(total_duration) - end_pad)
+    word_counts = []
+    for beat in spoken_beats:
+        text = " ".join((beat or "").split())
+        word_count = max(2, len(re.findall(r"\w+", text)))
+        # Give slightly more weight to longer lines so visual changes track the real spoken pace better.
+        char_weight = max(0, len(text) - 18) / 24.0
+        punctuation_weight = 0.35 * len(re.findall(r"[,:;!?-]", text))
+        word_counts.append(word_count + char_weight + punctuation_weight)
     if not word_counts:
         word_counts = [8]
     total_words = sum(word_counts)
     min_duration = 0.95 if scene_count >= 8 else 1.05
     max_duration = 1.85 if scene_count >= 8 else 2.2
     durations = [
-        max(min_duration, min(max_duration, total_duration * (count / total_words)))
+        max(min_duration, min(max_duration, spoken_duration * (count / total_words)))
         for count in word_counts
     ]
-    scale = total_duration / sum(durations)
+    scale = spoken_duration / sum(durations)
     durations = [duration * scale for duration in durations]
     if durations:
         durations[0] = max(1.2, min(1.9, durations[0]))
         durations[-1] = max(1.0, min(1.6, durations[-1]))
-        scale = total_duration / sum(durations)
+        scale = spoken_duration / sum(durations)
         durations = [duration * scale for duration in durations]
+        durations[-1] += end_pad
     return durations
 
 
@@ -423,7 +433,9 @@ def create_story_short(content):
         os.path.join(output_dir, "story_voiceover.mp3"),
     )
     voiceover = AudioFileClip(voice_path)
-    target_duration = max(15.0, min(30.0, voiceover.duration + 0.6))
+    voice_duration = max(float(voiceover.duration or 0), 0.1)
+    target_duration = max(15.0, min(30.0, voice_duration + 0.6))
+    end_pad = max(0.0, target_duration - voice_duration)
 
     scene_plan = normalize_scene_plan(content)
 
@@ -431,7 +443,7 @@ def create_story_short(content):
         item.get("line") or item.get("subtitle") or content["hook"]
         for item in scene_plan
     ]
-    scene_durations = build_scene_durations(target_duration, spoken_beats)
+    scene_durations = build_scene_durations(voice_duration, spoken_beats, end_pad=end_pad)
     if SHORTS_RENDER_MODE == "veo":
         output_path = render_veo_story_short(
             content,
