@@ -37,6 +37,11 @@ ALLOW_STOCK_FALLBACK = os.environ.get("ALLOW_STOCK_FALLBACK", "false").strip().l
     "true",
     "yes",
 }
+HERA_API_KEY = os.environ.get("HERA_API_KEY", "").strip()
+HERA_RESOLUTION = os.environ.get("HERA_RESOLUTION", "720p")
+HERA_FPS = os.environ.get("HERA_FPS", "30")
+HERA_POLL_SECONDS = int(os.environ.get("HERA_POLL_SECONDS", "10"))
+HERA_MAX_POLLS = int(os.environ.get("HERA_MAX_POLLS", "36"))
 VEO_MODEL = os.environ.get("VEO_MODEL", "veo-3.1-generate-preview")
 VEO_RESOLUTION = os.environ.get("VEO_RESOLUTION", "720p")
 VEO_DURATION_SECONDS = int(os.environ.get("VEO_DURATION_SECONDS", "4"))
@@ -459,6 +464,35 @@ def build_veo_scene_prompt(scene_type, keyword, visual_direction, subtitle="", s
     )
 
 
+def build_hera_scene_prompt(scene_type, keyword, visual_direction, subtitle="", scene_index=0):
+    scene_type = (scene_type or "abstract").lower()
+    beat = " ".join((visual_direction or keyword or "").split())
+    subtitle = " ".join((subtitle or "").split())
+    recipes = {
+        "hook": "Start with a sharp animated hook and immediate motion-graphics impact.",
+        "product_reveal": "Use sleek reveal animation, layered lighting, and premium product-style motion.",
+        "interface": "Use UI-inspired motion graphics, layered panels, animated interface cues, and screen-energy.",
+        "reaction": "Use expressive silhouette, pulse energy, kinetic typography-safe motion, and social buzz mood.",
+        "feature_demo": "Show feature-explainer motion graphics with cause-and-effect animation and visual clarity.",
+        "stage": "Use launch-event energy, spotlight motion, bold framing, and keynote-style presentation cues.",
+        "social_proof": "Show momentum, community energy, trending motion, and fast-moving attention signals.",
+        "consequence": "Show escalation and aftermath with more intensity and larger animated motion cues.",
+        "cta": "End with a strong closer beat, bold motion, and short-form final-hit energy.",
+        "abstract": "Use cinematic motion-graphics background visuals that match the story beat without on-screen text.",
+    }
+    recipe = recipes.get(scene_type, recipes["abstract"])
+    return (
+        "Create a premium vertical 9:16 motion-graphics background video for a YouTube Short. "
+        f"{recipe} "
+        f"Scene {scene_index + 1}. "
+        f"Primary concept: {keyword}. "
+        f"Story beat: {beat}. "
+        f"Mood cue: {subtitle}. "
+        "No captions, no subtitles, no embedded text, no logos, no watermarks. "
+        "Focus on animated background visuals that can sit behind narration."
+    )
+
+
 def generate_veo_scene_video(prompt, output_path):
     client = get_genai_client()
     operation = client.models.generate_videos(
@@ -480,6 +514,68 @@ def generate_veo_scene_video(prompt, output_path):
     generated_video = operation.response.generated_videos[0]
     client.files.download(file=generated_video.video)
     generated_video.video.save(output_path)
+    return output_path
+
+
+def generate_hera_scene_video(prompt, output_path, duration_seconds=4):
+    if not HERA_API_KEY:
+        raise RuntimeError("HERA_API_KEY is required for Hera background video generation.")
+
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": HERA_API_KEY,
+    }
+    payload = {
+        "prompt": prompt,
+        "outputs": [
+            {
+                "format": "mp4",
+                "aspect_ratio": "9:16",
+                "fps": HERA_FPS,
+                "resolution": HERA_RESOLUTION,
+            }
+        ],
+        "duration_seconds": max(1, min(60, int(round(duration_seconds)))),
+    }
+
+    create_response = requests.post(
+        "https://api.hera.video/v1/videos",
+        headers=headers,
+        json=payload,
+        timeout=60,
+    )
+    create_response.raise_for_status()
+    video_id = create_response.json()["video_id"]
+
+    status_url = f"https://api.hera.video/v1/videos/{video_id}"
+    last_payload = None
+    for poll_index in range(HERA_MAX_POLLS):
+        time.sleep(HERA_POLL_SECONDS if poll_index else 0)
+        status_response = requests.get(status_url, headers={"x-api-key": HERA_API_KEY}, timeout=60)
+        status_response.raise_for_status()
+        last_payload = status_response.json()
+        status = (last_payload.get("status") or "").lower()
+        if status == "success":
+            break
+        if status == "failed":
+            output_errors = [
+                output.get("error")
+                for output in last_payload.get("outputs", [])
+                if output.get("error")
+            ]
+            raise RuntimeError(
+                f"Hera video generation failed for {video_id}: "
+                f"{'; '.join(output_errors) if output_errors else 'unknown error'}"
+            )
+    else:
+        raise RuntimeError(f"Hera video generation timed out for {video_id}.")
+
+    outputs = last_payload.get("outputs", []) if last_payload else []
+    file_url = next((item.get("file_url") for item in outputs if item.get("file_url")), None)
+    if not file_url:
+        raise RuntimeError(f"Hera video generation succeeded for {video_id} but no file_url was returned.")
+
+    download_file(file_url, output_path)
     return output_path
 
 

@@ -16,6 +16,7 @@ from create_video import (
     build_motion_clip,
     create_background_music,
     create_generated_scene_clip,
+    build_hera_scene_prompt,
     create_hud_overlay,
     create_subtitle_overlay,
     create_transition_flash,
@@ -24,10 +25,12 @@ from create_video import (
     build_veo_scene_prompt,
     fetch_background_image,
     fit_vertical_clip,
+    generate_hera_scene_video,
     generate_veo_scene_video,
     split_sentences,
 )
 
+HERA_SCENE_COUNT = int(os.environ.get("HERA_SCENE_COUNT", "4"))
 VEO_SCENE_COUNT = int(os.environ.get("VEO_SCENE_COUNT", "3"))
 SHORTS_RENDER_MODE = os.environ.get("SHORTS_RENDER_MODE", "slides").strip().lower()
 
@@ -334,6 +337,104 @@ def render_veo_story_short(content, scene_plan, scene_durations, output_dir, tar
     return output_path
 
 
+def render_hera_story_short(content, scene_plan, scene_durations, output_dir, target_duration, voiceover):
+    scene_groups = group_story_scenes(scene_plan, scene_durations, HERA_SCENE_COUNT)
+    generated_paths = []
+    clips = []
+
+    for index, group in enumerate(scene_groups):
+        primary = group["scenes"][0]
+        scene_types = [scene.get("scene_type") or "abstract" for scene in group["scenes"]]
+        group_scene_type = scene_types[0]
+        if "cta" in scene_types:
+            group_scene_type = "cta"
+        elif "hook" in scene_types:
+            group_scene_type = "hook"
+        elif "interface" in scene_types or "feature_demo" in scene_types:
+            group_scene_type = "interface"
+        elif "product_reveal" in scene_types:
+            group_scene_type = "product_reveal"
+
+        beat_text = " ".join(
+            " ".join((scene.get("line") or scene.get("subtitle") or "").split())
+            for scene in group["scenes"]
+        )
+        visual_direction = " ".join(
+            " ".join((scene.get("visual_direction") or scene.get("visual_keyword") or "").split())
+            for scene in group["scenes"]
+        )
+        subtitle = " / ".join(
+            " ".join((scene.get("subtitle") or "").split())
+            for scene in group["scenes"]
+        )
+        keyword = primary.get("visual_keyword") or primary.get("visual_direction") or content["topic"]
+        hera_prompt = build_hera_scene_prompt(
+            scene_type=group_scene_type,
+            keyword=keyword,
+            visual_direction=f"{visual_direction}. Story flow: {beat_text}",
+            subtitle=subtitle,
+            scene_index=index,
+        )
+        group_duration = max(2.0, min(12.0, sum(group["durations"]) + 0.4))
+        scene_path = os.path.join(output_dir, f"story_scene_hera_{index + 1}.mp4")
+        generated_paths.append(generate_hera_scene_video(hera_prompt, scene_path, duration_seconds=group_duration))
+
+    for group, scene_path in zip(scene_groups, generated_paths):
+        base_clip = VideoFileClip(scene_path)
+        group_scene_count = len(group["scenes"])
+        clip_duration = max(float(base_clip.duration or 0), 0.1)
+        segment_length = clip_duration / max(group_scene_count, 1)
+
+        for local_index, scene in enumerate(group["scenes"]):
+            scene_duration = group["durations"][local_index]
+            start = min(segment_length * local_index, max(clip_duration - 0.05, 0))
+            end = min(clip_duration, start + segment_length)
+            if end - start < 0.2:
+                start = 0
+                end = clip_duration
+
+            segment_clip = base_clip.subclip(start, end)
+            clip = fit_vertical_clip(segment_clip, scene_duration)
+            transition = scene.get("transition")
+            clip = apply_transition_to_clip(clip, transition)
+            subtitle = scene.get("subtitle") or content["hook"]
+            subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
+            layers = [clip, subtitle_clip]
+            flash_clip = build_transition_flash(transition, scene_duration)
+            if flash_clip is not None:
+                layers.append(flash_clip)
+            composed = CompositeVideoClip(layers).set_duration(scene_duration)
+            clips.append(composed)
+
+        base_clip.close()
+
+    final_video = concatenate_videoclips(clips, method="compose").set_duration(target_duration)
+    voice_track = voiceover.set_start(0).volumex(1.0)
+    music = create_background_music(target_duration).set_duration(target_duration).volumex(0.16)
+    mixed_audio = CompositeAudioClip([music, voice_track]).set_duration(target_duration)
+    final_video = final_video.set_audio(mixed_audio)
+
+    output_path = os.path.join(output_dir, "story_short.mp4")
+    final_video.write_videofile(
+        output_path,
+        fps=30,
+        codec="libx264",
+        audio_codec="aac",
+        temp_audiofile=os.path.join(output_dir, "story_temp_audio.m4a"),
+        remove_temp=True,
+        logger=None,
+    )
+
+    for clip in clips:
+        clip.close()
+    for path in generated_paths:
+        if os.path.exists(path):
+            os.remove(path)
+    mixed_audio.close()
+    final_video.close()
+    return output_path
+
+
 def normalize_scene_plan(content):
     scene_plan = (content.get("scene_plan") or [])[:10]
     if scene_plan:
@@ -446,6 +547,15 @@ def create_story_short(content):
     scene_durations = build_scene_durations(voice_duration, spoken_beats, end_pad=end_pad)
     if SHORTS_RENDER_MODE == "veo":
         output_path = render_veo_story_short(
+            content,
+            scene_plan,
+            scene_durations,
+            output_dir,
+            target_duration,
+            voiceover,
+        )
+    elif SHORTS_RENDER_MODE == "hera":
+        output_path = render_hera_story_short(
             content,
             scene_plan,
             scene_durations,
