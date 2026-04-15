@@ -31,6 +31,7 @@ from create_video import (
 )
 
 HERA_SCENE_COUNT = int(os.environ.get("HERA_SCENE_COUNT", "4"))
+# Default Veo mode to exactly 3 generated clips, then stitch them into one short.
 VEO_SCENE_COUNT = int(os.environ.get("VEO_SCENE_COUNT", "3"))
 SHORTS_RENDER_MODE = os.environ.get("SHORTS_RENDER_MODE", "slides").strip().lower()
 
@@ -272,7 +273,7 @@ def render_slide_story_short(content, scene_plan, scene_durations, output_dir, t
 
 
 def render_veo_story_short(content, scene_plan, scene_durations, output_dir, target_duration, voiceover):
-    scene_groups = group_story_scenes(scene_plan, scene_durations, VEO_SCENE_COUNT)
+    scene_groups = group_story_scenes(scene_plan, scene_durations, 3)
     generated_paths = []
     clips = []
 

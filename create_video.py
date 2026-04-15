@@ -45,7 +45,7 @@ HERA_POLL_SECONDS = int(os.environ.get("HERA_POLL_SECONDS", "10"))
 HERA_MAX_POLLS = int(os.environ.get("HERA_MAX_POLLS", "36"))
 VEO_MODEL = os.environ.get("VEO_MODEL", "veo-3.1-generate-preview")
 VEO_RESOLUTION = os.environ.get("VEO_RESOLUTION", "720p")
-VEO_DURATION_SECONDS = int(os.environ.get("VEO_DURATION_SECONDS", "4"))
+VEO_DURATION_SECONDS = int(os.environ.get("VEO_DURATION_SECONDS", "8"))
 VEO_POLL_SECONDS = int(os.environ.get("VEO_POLL_SECONDS", "10"))
 
 
