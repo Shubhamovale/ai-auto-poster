@@ -555,14 +555,25 @@ def create_story_short(content):
             voiceover,
         )
     elif SHORTS_RENDER_MODE == "hera":
-        output_path = render_hera_story_short(
-            content,
-            scene_plan,
-            scene_durations,
-            output_dir,
-            target_duration,
-            voiceover,
-        )
+        try:
+            output_path = render_hera_story_short(
+                content,
+                scene_plan,
+                scene_durations,
+                output_dir,
+                target_duration,
+                voiceover,
+            )
+        except Exception as exc:
+            print(f"Hera render failed: {exc}. Falling back to slide renderer...")
+            output_path = render_slide_story_short(
+                content,
+                scene_plan,
+                scene_durations,
+                output_dir,
+                target_duration,
+                voiceover,
+            )
     elif SHORTS_RENDER_MODE == "generated":
         output_path = render_generated_story_short(
             content,

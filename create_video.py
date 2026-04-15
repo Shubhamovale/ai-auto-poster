@@ -32,6 +32,7 @@ if not hasattr(Image, "ANTIALIAS"):
 
 
 VOICEOVER_SPEED = float(os.environ.get("VOICEOVER_SPEED", "1.12"))
+DEFAULT_ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"
 ALLOW_STOCK_FALLBACK = os.environ.get("ALLOW_STOCK_FALLBACK", "false").strip().lower() in {
     "1",
     "true",
@@ -870,7 +871,7 @@ def has_elevenlabs_access():
 
 
 def create_elevenlabs_voiceover(script, output_path):
-    voice_id = os.environ.get("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
+    voice_id = os.environ.get("ELEVENLABS_VOICE_ID", "").strip() or DEFAULT_ELEVENLABS_VOICE_ID
     response = requests.post(
         f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
         headers={
