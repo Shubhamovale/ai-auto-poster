@@ -37,7 +37,8 @@ from create_video import (
 HERA_SCENE_COUNT = int(os.environ.get("HERA_SCENE_COUNT", "4"))
 # Default Veo mode to exactly 3 generated clips, then stitch them into one short.
 VEO_SCENE_COUNT = int(os.environ.get("VEO_SCENE_COUNT", "3"))
-SHORTS_RENDER_MODE = os.environ.get("SHORTS_RENDER_MODE", "slides").strip().lower()
+SHORTS_RENDER_MODE = os.environ.get("SHORTS_RENDER_MODE", "pexels").strip().lower()
+SHORTS_RENDER_MODE = "pexels"  # Forcing Pexels conditionally upon user request
 
 
 def build_scene_durations(total_duration, spoken_beats, end_pad=0.0):
@@ -758,8 +759,8 @@ def create_story_short(content):
                 voiceover,
             )
         except Exception as exc:
-            print(f"Veo render failed: {exc}. Falling back to AI Image renderer...")
-            output_path = render_ai_image_story_short(
+            print(f"Veo render failed: {exc}. Falling back to Pexels renderer...")
+            output_path = render_pexels_story_short(
                 content,
                 scene_plan,
                 scene_durations,
