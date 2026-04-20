@@ -917,6 +917,20 @@ def has_pexels_access():
     return bool(os.environ.get("PEXELS_API_KEY"))
 
 
+def fetch_ai_image(prompt, path):
+    import urllib.parse
+    import requests
+    import random
+    seed = random.randint(1, 999999)
+    safe_prompt = urllib.parse.quote(prompt)
+    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1080&height=1920&nologo=true&seed={seed}"
+    response = requests.get(url, timeout=45)
+    response.raise_for_status()
+    with open(path, "wb") as f:
+        f.write(response.content)
+    return path
+
+
 def fetch_pexels_video(query):
     headers = {"Authorization": os.environ["PEXELS_API_KEY"]}
     response = requests.get(

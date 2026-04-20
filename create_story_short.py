@@ -30,6 +30,7 @@ from create_video import (
     generate_veo_scene_video,
     split_sentences,
     fetch_pexels_video,
+    fetch_ai_image,
     download_file,
 )
 
@@ -369,6 +370,80 @@ def render_pexels_story_short(content, scene_plan, scene_durations, output_dir, 
     return output_path
 
 
+def render_ai_image_story_short(content, scene_plan, scene_durations, output_dir, target_duration, voiceover):
+    from moviepy.editor import CompositeVideoClip, concatenate_videoclips, CompositeAudioClip
+    import random
+    
+    clips = []
+    downloaded_paths = []
+    motion_variants = ["push_in", "pan_left", "pan_right", "tilt_up", "tilt_down", "drift_left", "drift_right"]
+
+    for index, scene in enumerate(scene_plan):
+        scene_duration = scene_durations[index]
+        subtitle_text = scene.get("subtitle") or scene.get("line") or content.get("hook", "")
+        
+        keyword = extract_pexels_query(subtitle_text, content.get("topic") or "technology")
+        image_prompt = f"{subtitle_text}, {keyword}, beautiful photorealistic cinematic vertical 9:16 photography, highly detailed, dramatic lighting"
+        
+        try:
+            print(f"FETCHING AI IMAGE FOR: {image_prompt}")
+            scene_path = os.path.join(output_dir, f"story_scene_ai_img_{index + 1}.jpg")
+            fetch_ai_image(image_prompt, scene_path)
+            downloaded_paths.append(scene_path)
+            
+            motion = random.choice(motion_variants)
+            if index == 0:
+                motion = "push_in"
+                
+            clip = build_motion_clip(
+                scene_path, 
+                duration=scene_duration, 
+                zoom_start=1.03, 
+                zoom_end=1.10, 
+                motion_variant=motion
+            )
+        except Exception as e:
+            print(f"FAILED AI IMAGE GENERATION: {e}")
+            from moviepy.editor import ColorClip
+            clip = ColorClip((1080, 1920), color=(30, 30, 50)).set_duration(scene_duration)
+            
+        transition = scene.get("transition")
+        clip = apply_transition_to_clip(clip, transition)
+        subtitle_clip = create_youtube_style_subtitle(subtitle_text, scene_duration)
+        layers = [clip, subtitle_clip]
+        flash_clip = build_transition_flash(transition, scene_duration)
+        if flash_clip is not None:
+            layers.append(flash_clip)
+        composed = CompositeVideoClip(layers).set_duration(scene_duration)
+        clips.append(composed)
+
+    final_video = concatenate_videoclips(clips, method="compose").set_duration(target_duration)
+    voice_track = voiceover.set_start(0).volumex(1.0)
+    music = create_background_music(target_duration).set_duration(target_duration).volumex(0.16)
+    mixed_audio = CompositeAudioClip([music, voice_track]).set_duration(target_duration)
+    final_video = final_video.set_audio(mixed_audio)
+
+    output_path = os.path.join(output_dir, "story_short.mp4")
+    final_video.write_videofile(
+        output_path,
+        fps=30,
+        codec="libx264",
+        audio_codec="aac",
+        temp_audiofile=os.path.join(output_dir, "story_temp_audio_ai.m4a"),
+        remove_temp=True,
+        logger=None,
+    )
+
+    for clip in clips:
+        clip.close()
+    for path in downloaded_paths:
+        if os.path.exists(path):
+            os.remove(path)
+    mixed_audio.close()
+    final_video.close()
+    return output_path
+
+
 def render_veo_story_short(content, scene_plan, scene_durations, output_dir, target_duration, voiceover):
     scene_groups = group_story_scenes(scene_plan, scene_durations, 3)
     generated_paths = []
@@ -667,8 +742,8 @@ def create_story_short(content):
                 voiceover,
             )
         except Exception as exc:
-            print(f"Veo render failed: {exc}. Falling back to Pexels renderer...")
-            output_path = render_pexels_story_short(
+            print(f"Veo render failed: {exc}. Falling back to AI Image renderer...")
+            output_path = render_ai_image_story_short(
                 content,
                 scene_plan,
                 scene_durations,
@@ -676,6 +751,15 @@ def create_story_short(content):
                 target_duration,
                 voiceover,
             )
+    elif SHORTS_RENDER_MODE == "ai_image":
+        output_path = render_ai_image_story_short(
+            content,
+            scene_plan,
+            scene_durations,
+            output_dir,
+            target_duration,
+            voiceover,
+        )
     elif SHORTS_RENDER_MODE == "hera":
         try:
             output_path = render_hera_story_short(
