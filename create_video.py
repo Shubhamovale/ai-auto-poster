@@ -199,10 +199,11 @@ def create_subtitle_overlay(text, duration, size=(1080, 1920)):
     return base.set_position(subtitle_position).fadein(min(0.12, duration / 4))
 
 
-def create_word_by_word_subtitle_overlay(text, duration, size=(1080, 1920)):
+def create_youtube_style_subtitle(text, duration, size=(1080, 1920)):
     from moviepy.editor import ImageClip, concatenate_videoclips
     from PIL import Image, ImageDraw, ImageFont
     import numpy as np
+    import textwrap
 
     words = (text or "").upper().split()
     if not words:
@@ -212,33 +213,63 @@ def create_word_by_word_subtitle_overlay(text, duration, size=(1080, 1920)):
     clips = []
 
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 90)
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 60)
     except Exception:
         font = ImageFont.load_default()
 
-    for word_idx, word in enumerate(words):
+    wrapped_lines = textwrap.wrap(" ".join(words), width=18)
+    line_height = 85
+    total_height = len(wrapped_lines) * line_height
+    start_y = (size[1] - total_height) // 2 + 350
+    
+    current_word_global = 0
+    
+    for word_idx in range(len(words)):
         canvas = Image.new("RGBA", size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(canvas)
         
-        bbox = draw.textbbox((0, 0), word, font=font)
-        w = bbox[2] - bbox[0]
-        h = bbox[3] - bbox[1]
+        drawn_y = start_y
+        word_counter = 0
         
-        x = (size[0] - w) // 2
-        y = (size[1] - h) // 2
-        
-        padding_x = 40
-        padding_y = 20
-        draw.rounded_rectangle(
-            [x - padding_x, y - padding_y, x + w + padding_x, y + h + padding_y + 10],
-            radius=24,
-            fill=(0, 0, 0, 230)
-        )
-        
-        draw.text((x + 4, y + 4), word, font=font, fill="black")
-        color = "#FFD700" if (word_idx % 2 == 0) else "white"
-        draw.text((x, y), word, font=font, fill=color)
-        
+        for line in wrapped_lines:
+            line_words = line.split()
+            line_w = 0
+            word_boxes = []
+            
+            for lw in line_words:
+                bbox = draw.textbbox((0, 0), lw, font=font)
+                w = bbox[2] - bbox[0]
+                word_boxes.append(w)
+                line_w += w + 20
+                
+            line_w -= 20
+            start_x = (size[0] - line_w) // 2
+            drawn_x = start_x
+            
+            for i, lw in enumerate(line_words):
+                is_active = (word_counter == word_idx)
+                w = word_boxes[i]
+                
+                if is_active:
+                    draw.rounded_rectangle(
+                        [drawn_x - 15, drawn_y - 10, drawn_x + w + 15, drawn_y + 85],
+                        radius=15, fill=(0, 0, 0, 230)
+                    )
+                else:
+                    draw.rounded_rectangle(
+                        [drawn_x - 15, drawn_y - 10, drawn_x + w + 15, drawn_y + 85],
+                        radius=15, fill=(0, 0, 0, 120)
+                    )
+                    
+                draw.text((drawn_x + 4, drawn_y + 4), lw, font=font, fill="black")
+                color = "#FFD700" if is_active else "white"
+                draw.text((drawn_x, drawn_y), lw, font=font, fill=color)
+                
+                drawn_x += w + 20
+                word_counter += 1
+                
+            drawn_y += line_height
+            
         clip = ImageClip(np.array(canvas)).set_duration(word_duration)
         clips.append(clip)
 

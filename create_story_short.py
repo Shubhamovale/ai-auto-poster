@@ -19,7 +19,7 @@ from create_video import (
     build_hera_scene_prompt,
     create_hud_overlay,
     create_subtitle_overlay,
-    create_word_by_word_subtitle_overlay,
+    create_youtube_style_subtitle,
     create_transition_flash,
     create_text_frame,
     create_voiceover,
@@ -275,6 +275,26 @@ def render_slide_story_short(content, scene_plan, scene_durations, output_dir, t
     return output_path
 
 
+def extract_pexels_query(sentence_text, fallback):
+    import re
+    clean = re.sub(r'(?i)\b(video|photo|show|make|like|when|what|scene|background|image|picture|look|see|saying|speech)\b', '', sentence_text)
+    
+    proper_nouns = re.findall(r'\b[A-Z][a-z0-9]+\b', sentence_text)
+    valid_proper = [w for w in proper_nouns if w.lower() not in {"the", "a", "an", "i", "it", "he", "she", "they", "we", "you", "this", "that"}]
+    if valid_proper:
+        return " ".join(valid_proper[:2])
+        
+    words = re.findall(r'\b[a-zA-Z]{5,}\b', clean)
+    stop_words = {"there", "these", "those", "their", "could", "would", "should", "about", "which", "where", "really", "very", "much", "many", "other", "another", "something", "anything"}
+    words = [w for w in words if w.lower() not in stop_words]
+    
+    if len(words) >= 2:
+        return f"{words[0]} {words[1]}"
+    elif words:
+        return words[0]
+    return fallback
+
+
 def render_pexels_story_short(content, scene_plan, scene_durations, output_dir, target_duration, voiceover):
     clips = []
     downloaded_paths = []
@@ -283,17 +303,20 @@ def render_pexels_story_short(content, scene_plan, scene_durations, output_dir, 
         scene_duration = scene_durations[index]
         subtitle_text = scene.get("subtitle") or scene.get("line") or content.get("hook", "")
         
-        keyword = scene.get("visual_keyword") or scene.get("visual_direction")
-        if not keyword:
-            words = [w for w in subtitle_text.split() if w.isalpha() and len(w) > 4]
-            keyword = words[0] if words else content.get("topic") or "technology"
+        # Dynamically map the video strictly to what the text says
+        keyword = extract_pexels_query(subtitle_text, content.get("topic") or "technology")
         
         try:
             print(f"FETCHING PEXELS VIDEO FOR: {keyword}")
             link = fetch_pexels_video(keyword)
+            if not link and len(keyword.split()) > 1:
+                # Try broadening search
+                fallback_word = keyword.split()[0]
+                print(f"NO PEXELS VIDEO FOR '{keyword}', FALLING BACK TO '{fallback_word}'...")
+                link = fetch_pexels_video(fallback_word)
             if not link:
-                print(f"NO PEXELS VIDEO FOR {keyword}, TRYING FALLBACK...")
-                link = fetch_pexels_video("technology")
+                print(f"NO PEXELS VIDEO SHOWN, TRYING GENERIC FALLBACK...")
+                link = fetch_pexels_video(content.get("topic") or "technology")
                 
             if link:
                 scene_path = os.path.join(output_dir, f"story_scene_pexels_{index + 1}.mp4")
@@ -311,7 +334,7 @@ def render_pexels_story_short(content, scene_plan, scene_durations, output_dir, 
             
         transition = scene.get("transition")
         clip = apply_transition_to_clip(clip, transition)
-        subtitle_clip = create_word_by_word_subtitle_overlay(subtitle_text, scene_duration)
+        subtitle_clip = create_youtube_style_subtitle(subtitle_text, scene_duration)
         layers = [clip, subtitle_clip]
         flash_clip = build_transition_flash(transition, scene_duration)
         if flash_clip is not None:
@@ -604,22 +627,35 @@ def create_story_short(content):
     output_dir = os.path.join(os.getcwd(), "output")
     metadata_path, script_path, outline_path = save_story_assets(output_dir, content)
 
-    voice_path = create_voiceover(
-        content["voiceover_script"],
-        os.path.join(output_dir, "story_voiceover.mp3"),
-    )
-    voiceover = AudioFileClip(voice_path)
-    voice_duration = max(float(voiceover.duration or 0), 0.1)
-    target_duration = max(15.0, min(30.0, voice_duration + 0.6))
-    end_pad = max(0.0, target_duration - voice_duration)
-
     scene_plan = normalize_scene_plan(content)
 
     spoken_beats = [
-        item.get("line") or item.get("subtitle") or content["hook"]
+        item.get("line") or item.get("subtitle") or content.get("hook", "")
         for item in scene_plan
     ]
-    scene_durations = build_scene_durations(voice_duration, spoken_beats, end_pad=end_pad)
+
+    scene_durations = []
+    voice_clips = []
+    from moviepy.editor import concatenate_audioclips
+    import glob
+
+    for old_beat in glob.glob(os.path.join(output_dir, "beat_voice_*.mp3")):
+        try: os.remove(old_beat)
+        except OSError: pass
+
+    for i, beat in enumerate(spoken_beats):
+        beat_path = os.path.join(output_dir, f"beat_voice_{i}.mp3")
+        create_voiceover(beat, beat_path)
+        clip = AudioFileClip(beat_path)
+        scene_durations.append(clip.duration)
+        voice_clips.append(clip)
+
+    voiceover = concatenate_audioclips(voice_clips)
+    voice_duration = voiceover.duration
+    target_duration = max(15.0, min(60.0, voice_duration + 0.6))
+    
+    if target_duration > voice_duration:
+        scene_durations[-1] += target_duration - voice_duration
     if SHORTS_RENDER_MODE == "veo":
         try:
             output_path = render_veo_story_short(
