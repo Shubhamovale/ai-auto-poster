@@ -28,6 +28,8 @@ from create_video import (
     generate_hera_scene_video,
     generate_veo_scene_video,
     split_sentences,
+    fetch_pexels_video,
+    download_file,
 )
 
 HERA_SCENE_COUNT = int(os.environ.get("HERA_SCENE_COUNT", "4"))
@@ -267,6 +269,73 @@ def render_slide_story_short(content, scene_plan, scene_durations, output_dir, t
 
     for clip in clips:
         clip.close()
+    mixed_audio.close()
+    final_video.close()
+    return output_path
+
+
+def render_pexels_story_short(content, scene_plan, scene_durations, output_dir, target_duration, voiceover):
+    clips = []
+    downloaded_paths = []
+
+    for index, scene in enumerate(scene_plan):
+        scene_duration = scene_durations[index]
+        keyword = scene.get("visual_keyword") or scene.get("visual_direction") or content.get("topic") or "technology"
+        
+        try:
+            print(f"FETCHING PEXELS VIDEO FOR: {keyword}")
+            link = fetch_pexels_video(keyword)
+            if not link:
+                print(f"NO PEXELS VIDEO FOR {keyword}, TRYING FALLBACK...")
+                link = fetch_pexels_video("technology")
+                
+            if link:
+                scene_path = os.path.join(output_dir, f"story_scene_pexels_{index + 1}.mp4")
+                download_file(link, scene_path)
+                downloaded_paths.append(scene_path)
+                
+                base_clip = VideoFileClip(scene_path)
+                clip = fit_vertical_clip(base_clip, scene_duration)
+            else:
+                raise RuntimeError("No fallback stock video found on Pexels either.")
+        except Exception as e:
+            print(f"FAILED PEXELS FALLBACK: {e}")
+            from moviepy.editor import ColorClip
+            clip = ColorClip((1080, 1920), color=(30, 30, 50)).set_duration(scene_duration)
+            
+        transition = scene.get("transition")
+        clip = apply_transition_to_clip(clip, transition)
+        subtitle = scene.get("subtitle") or content.get("hook", "")
+        subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
+        layers = [clip, subtitle_clip]
+        flash_clip = build_transition_flash(transition, scene_duration)
+        if flash_clip is not None:
+            layers.append(flash_clip)
+        composed = CompositeVideoClip(layers).set_duration(scene_duration)
+        clips.append(composed)
+
+    final_video = concatenate_videoclips(clips, method="compose").set_duration(target_duration)
+    voice_track = voiceover.set_start(0).volumex(1.0)
+    music = create_background_music(target_duration).set_duration(target_duration).volumex(0.16)
+    mixed_audio = CompositeAudioClip([music, voice_track]).set_duration(target_duration)
+    final_video = final_video.set_audio(mixed_audio)
+
+    output_path = os.path.join(output_dir, "story_short.mp4")
+    final_video.write_videofile(
+        output_path,
+        fps=30,
+        codec="libx264",
+        audio_codec="aac",
+        temp_audiofile=os.path.join(output_dir, "story_temp_audio.m4a"),
+        remove_temp=True,
+        logger=None,
+    )
+
+    for clip in clips:
+        clip.close()
+    for path in downloaded_paths:
+        if os.path.exists(path):
+            os.remove(path)
     mixed_audio.close()
     final_video.close()
     return output_path
@@ -547,14 +616,25 @@ def create_story_short(content):
     ]
     scene_durations = build_scene_durations(voice_duration, spoken_beats, end_pad=end_pad)
     if SHORTS_RENDER_MODE == "veo":
-        output_path = render_veo_story_short(
-            content,
-            scene_plan,
-            scene_durations,
-            output_dir,
-            target_duration,
-            voiceover,
-        )
+        try:
+            output_path = render_veo_story_short(
+                content,
+                scene_plan,
+                scene_durations,
+                output_dir,
+                target_duration,
+                voiceover,
+            )
+        except Exception as exc:
+            print(f"Veo render failed: {exc}. Falling back to Pexels renderer...")
+            output_path = render_pexels_story_short(
+                content,
+                scene_plan,
+                scene_durations,
+                output_dir,
+                target_duration,
+                voiceover,
+            )
     elif SHORTS_RENDER_MODE == "hera":
         try:
             output_path = render_hera_story_short(
@@ -577,6 +657,15 @@ def create_story_short(content):
             )
     elif SHORTS_RENDER_MODE == "generated":
         output_path = render_generated_story_short(
+            content,
+            scene_plan,
+            scene_durations,
+            output_dir,
+            target_duration,
+            voiceover,
+        )
+    elif SHORTS_RENDER_MODE == "pexels":
+        output_path = render_pexels_story_short(
             content,
             scene_plan,
             scene_durations,
