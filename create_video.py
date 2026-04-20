@@ -982,34 +982,52 @@ def download_file(url, path):
 
 
 def has_elevenlabs_access():
-    return bool(os.environ.get("ELEVENLABS_API_KEY"))
+    return bool(os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("ELEVENLABS_API_KEY_2"))
 
 
 def create_elevenlabs_voiceover(script, output_path):
     voice_id = os.environ.get("ELEVENLABS_VOICE_ID", "").strip() or DEFAULT_ELEVENLABS_VOICE_ID
-    response = requests.post(
-        f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
-        headers={
-            "xi-api-key": os.environ["ELEVENLABS_API_KEY"],
-            "Content-Type": "application/json",
-            "Accept": "audio/mpeg",
-        },
-        json={
-            "text": script,
-            "model_id": "eleven_multilingual_v2",
-            "voice_settings": {
-                "stability": 0.36,
-                "similarity_boost": 0.84,
-                "style": 0.42,
-                "use_speaker_boost": True,
+    
+    api_key_1 = os.environ.get("ELEVENLABS_API_KEY")
+    api_key_2 = os.environ.get("ELEVENLABS_API_KEY_2")
+    keys_to_try = [k for k in [api_key_1, api_key_2] if k]
+    
+    last_err = None
+    for idx, key in enumerate(keys_to_try):
+        response = requests.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+            headers={
+                "xi-api-key": key,
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg",
             },
-        },
-        timeout=120,
-    )
-    response.raise_for_status()
-    with open(output_path, "wb") as f:
-        f.write(response.content)
-    return output_path
+            json={
+                "text": script,
+                "model_id": "eleven_multilingual_v2",
+                "voice_settings": {
+                    "stability": 0.36,
+                    "similarity_boost": 0.84,
+                    "style": 0.42,
+                    "use_speaker_boost": True,
+                },
+            },
+            timeout=120,
+        )
+        try:
+            response.raise_for_status()
+            with open(output_path, "wb") as f:
+                f.write(response.content)
+            return output_path
+        except requests.exceptions.HTTPError as e:
+            last_err = e
+            if response.status_code in {401, 429} and idx < len(keys_to_try) - 1:
+                print(f"ElevenLabs Key {idx+1} failed ({response.status_code}). Trying next key...")
+                continue
+            break
+            
+    if last_err:
+        raise last_err
+    raise RuntimeError("All configured ElevenLabs keys failed or didn't work.")
 
 
 def apply_voiceover_speed(output_path, speed=VOICEOVER_SPEED):
