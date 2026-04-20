@@ -200,7 +200,7 @@ def create_subtitle_overlay(text, duration, size=(1080, 1920)):
 
 
 def create_word_by_word_subtitle_overlay(text, duration, size=(1080, 1920)):
-    from moviepy.editor import VideoClip
+    from moviepy.editor import ImageClip, concatenate_videoclips
     from PIL import Image, ImageDraw, ImageFont
     import numpy as np
 
@@ -209,29 +209,24 @@ def create_word_by_word_subtitle_overlay(text, duration, size=(1080, 1920)):
         words = [""]
         
     word_duration = duration / len(words)
+    clips = []
 
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 90)
     except Exception:
         font = ImageFont.load_default()
 
-    def make_frame(t):
-        word_idx = min(int(t / max(word_duration, 0.001)), len(words) - 1)
-        word = words[word_idx]
-        
+    for word_idx, word in enumerate(words):
         canvas = Image.new("RGBA", size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(canvas)
         
-        # Calculate text bounding box
         bbox = draw.textbbox((0, 0), word, font=font)
         w = bbox[2] - bbox[0]
         h = bbox[3] - bbox[1]
         
-        # Position at center
         x = (size[0] - w) // 2
         y = (size[1] - h) // 2
         
-        # Dynamic padding
         padding_x = 40
         padding_y = 20
         draw.rounded_rectangle(
@@ -240,16 +235,18 @@ def create_word_by_word_subtitle_overlay(text, duration, size=(1080, 1920)):
             fill=(0, 0, 0, 230)
         )
         
-        # Draw shadow
         draw.text((x + 4, y + 4), word, font=font, fill="black")
-        
-        # Alternate highlights
         color = "#FFD700" if (word_idx % 2 == 0) else "white"
         draw.text((x, y), word, font=font, fill=color)
         
-        return np.array(canvas)
+        clip = ImageClip(np.array(canvas)).set_duration(word_duration)
+        clips.append(clip)
 
-    return VideoClip(make_frame, duration=duration)
+    if not clips:
+        canvas = Image.new("RGBA", size, (0, 0, 0, 0))
+        return ImageClip(np.array(canvas)).set_duration(duration)
+
+    return concatenate_videoclips(clips, method="compose").set_duration(duration)
 
 
 def create_transition_flash(duration, color=(255, 255, 255), opacity=0.16, size=(1080, 1920)):
