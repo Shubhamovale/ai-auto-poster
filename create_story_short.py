@@ -403,9 +403,25 @@ def render_ai_image_story_short(content, scene_plan, scene_durations, output_dir
                 motion_variant=motion
             )
         except Exception as e:
-            print(f"FAILED AI IMAGE GENERATION: {e}")
-            from moviepy.editor import ColorClip
-            clip = ColorClip((1080, 1920), color=(30, 30, 50)).set_duration(scene_duration)
+            print(f"FAILED AI IMAGE GENERATION: {e}. Falling back to Pexels...")
+            try:
+                from moviepy.editor import VideoFileClip
+                link = fetch_pexels_video(keyword)
+                if not link and len(keyword.split()) > 1:
+                    link = fetch_pexels_video(keyword.split()[0])
+                if not link:
+                    link = fetch_pexels_video("technology")
+                    
+                scene_path_video = os.path.join(output_dir, f"story_scene_pexels_fallback_{index + 1}.mp4")
+                download_file(link, scene_path_video)
+                downloaded_paths.append(scene_path_video)
+                
+                base_clip = VideoFileClip(scene_path_video)
+                clip = fit_vertical_clip(base_clip, scene_duration)
+            except Exception as ex:
+                print(f"FAILED PEXELS FALLBACK AS WELL: {ex}")
+                from moviepy.editor import ColorClip
+                clip = ColorClip((1080, 1920), color=(30, 30, 50)).set_duration(scene_duration)
             
         transition = scene.get("transition")
         clip = apply_transition_to_clip(clip, transition)

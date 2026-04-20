@@ -921,14 +921,32 @@ def fetch_ai_image(prompt, path):
     import urllib.parse
     import requests
     import random
+    import time
+    
     seed = random.randint(1, 999999)
     safe_prompt = urllib.parse.quote(prompt)
-    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1080&height=1920&nologo=true&seed={seed}"
-    response = requests.get(url, timeout=45)
-    response.raise_for_status()
-    with open(path, "wb") as f:
-        f.write(response.content)
-    return path
+    
+    print("Waiting slightly to avoid Pollinations rate limit...")
+    time.sleep(2)
+    
+    for attempt in range(4):
+        url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1080&height=1920&nologo=true&seed={seed}&model=flux"
+        try:
+            response = requests.get(url, timeout=30)
+            if response.status_code == 200:
+                with open(path, "wb") as f:
+                    f.write(response.content)
+                return path
+            elif response.status_code == 429:
+                print(f"Pollinations rate limit hit. Sleeping {6 * (attempt + 1)}s...")
+                time.sleep(6 * (attempt + 1))
+            else:
+                response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            print(f"AI Image fetch error: {e}. Retrying...")
+            time.sleep(3)
+            
+    raise RuntimeError("Failed to fetch AI image after retries due to rate limits.")
 
 
 def fetch_pexels_video(query):
