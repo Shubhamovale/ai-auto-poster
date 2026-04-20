@@ -19,6 +19,7 @@ from create_video import (
     build_hera_scene_prompt,
     create_hud_overlay,
     create_subtitle_overlay,
+    create_word_by_word_subtitle_overlay,
     create_transition_flash,
     create_text_frame,
     create_voiceover,
@@ -280,7 +281,12 @@ def render_pexels_story_short(content, scene_plan, scene_durations, output_dir, 
 
     for index, scene in enumerate(scene_plan):
         scene_duration = scene_durations[index]
-        keyword = scene.get("visual_keyword") or scene.get("visual_direction") or content.get("topic") or "technology"
+        subtitle_text = scene.get("subtitle") or scene.get("line") or content.get("hook", "")
+        
+        keyword = scene.get("visual_keyword") or scene.get("visual_direction")
+        if not keyword:
+            words = [w for w in subtitle_text.split() if w.isalpha() and len(w) > 4]
+            keyword = words[0] if words else content.get("topic") or "technology"
         
         try:
             print(f"FETCHING PEXELS VIDEO FOR: {keyword}")
@@ -305,8 +311,7 @@ def render_pexels_story_short(content, scene_plan, scene_durations, output_dir, 
             
         transition = scene.get("transition")
         clip = apply_transition_to_clip(clip, transition)
-        subtitle = scene.get("subtitle") or content.get("hook", "")
-        subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
+        subtitle_clip = create_word_by_word_subtitle_overlay(subtitle_text, scene_duration)
         layers = [clip, subtitle_clip]
         flash_clip = build_transition_flash(transition, scene_duration)
         if flash_clip is not None:

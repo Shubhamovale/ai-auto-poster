@@ -199,6 +199,59 @@ def create_subtitle_overlay(text, duration, size=(1080, 1920)):
     return base.set_position(subtitle_position).fadein(min(0.12, duration / 4))
 
 
+def create_word_by_word_subtitle_overlay(text, duration, size=(1080, 1920)):
+    from moviepy.editor import VideoClip
+    from PIL import Image, ImageDraw, ImageFont
+    import numpy as np
+
+    words = (text or "").upper().split()
+    if not words:
+        words = [""]
+        
+    word_duration = duration / len(words)
+
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 90)
+    except Exception:
+        font = ImageFont.load_default()
+
+    def make_frame(t):
+        word_idx = min(int(t / max(word_duration, 0.001)), len(words) - 1)
+        word = words[word_idx]
+        
+        canvas = Image.new("RGBA", size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(canvas)
+        
+        # Calculate text bounding box
+        bbox = draw.textbbox((0, 0), word, font=font)
+        w = bbox[2] - bbox[0]
+        h = bbox[3] - bbox[1]
+        
+        # Position at center
+        x = (size[0] - w) // 2
+        y = (size[1] - h) // 2
+        
+        # Dynamic padding
+        padding_x = 40
+        padding_y = 20
+        draw.rounded_rectangle(
+            [x - padding_x, y - padding_y, x + w + padding_x, y + h + padding_y + 10],
+            radius=24,
+            fill=(0, 0, 0, 230)
+        )
+        
+        # Draw shadow
+        draw.text((x + 4, y + 4), word, font=font, fill="black")
+        
+        # Alternate highlights
+        color = "#FFD700" if (word_idx % 2 == 0) else "white"
+        draw.text((x, y), word, font=font, fill=color)
+        
+        return np.array(canvas)
+
+    return VideoClip(make_frame, duration=duration)
+
+
 def create_transition_flash(duration, color=(255, 255, 255), opacity=0.16, size=(1080, 1920)):
     flash_duration = max(0.04, min(0.14, duration))
     flash = ColorClip(size, color=color).set_duration(flash_duration).set_opacity(opacity)
@@ -841,11 +894,13 @@ def fetch_pexels_video(query):
     response = requests.get(
         "https://api.pexels.com/videos/search",
         headers=headers,
-        params={"query": query, "orientation": "portrait", "per_page": 10},
+        params={"query": query, "orientation": "portrait", "per_page": 15},
         timeout=20,
     )
     response.raise_for_status()
     videos = response.json().get("videos", [])
+    import random
+    random.shuffle(videos)
     for video in videos:
         files = sorted(
             video.get("video_files", []),
