@@ -66,7 +66,16 @@ Rules:
     content = json.loads(text)
 
     if "hook_subtitle" not in content or not content["hook_subtitle"].strip():
-        content["hook_subtitle"] = "These tools save money fast."
+        import random
+        subtitles = [
+            "These tools will save you hours.",
+            "You need to see this right now.",
+            "Wait till you see the last one.",
+            "This will blow your mind.",
+            "These tips are a game changer.",
+            "Stop what you're doing and watch."
+        ]
+        content["hook_subtitle"] = random.choice(subtitles)
 
     content.setdefault("hero_keyword", content.get("image_keyword", topic))
     content.setdefault("badge_left_keyword", content.get("hero_keyword", topic))

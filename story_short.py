@@ -1,4 +1,8 @@
 import traceback
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from create_story_short import create_story_short
 from generate_story_content import generate_story_content

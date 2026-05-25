@@ -1,4 +1,8 @@
 import traceback
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from create_image import create_trending_poster
 from generate_content import generate_post_content

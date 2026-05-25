@@ -1090,13 +1090,14 @@ def create_stock_video_reel(content, output_dir):
     target_duration = max(15.0, voiceover.duration + 0.8)
     scene_durations = build_scene_durations(target_duration, 6)
 
+    cta_options = ["FOLLOW FOR MORE AI TOOLS", "HIT FOLLOW FOR MORE", "SUBSCRIBE FOR PART 2", "LIKE & FOLLOW FOR MORE", "DON'T MISS TOMORROW'S TOOLS"]
     scene_specs = [
         {"query": keywords[0], "duration": scene_durations[0], "subtitle": subtitle_lines[0] if len(subtitle_lines) > 0 else content["title"]},
         {"query": keywords[1] if len(keywords) > 1 else points[0], "duration": scene_durations[1], "subtitle": subtitle_lines[1] if len(subtitle_lines) > 1 else points[0]},
         {"query": keywords[2] if len(keywords) > 2 else points[1], "duration": scene_durations[2], "subtitle": subtitle_lines[2] if len(subtitle_lines) > 2 else points[1]},
         {"query": keywords[3] if len(keywords) > 3 else points[2], "duration": scene_durations[3], "subtitle": subtitle_lines[3] if len(subtitle_lines) > 3 else points[2]},
         {"query": keywords[4] if len(keywords) > 4 else points[3], "duration": scene_durations[4], "subtitle": subtitle_lines[4] if len(subtitle_lines) > 4 else points[3]},
-        {"query": keywords[0], "duration": scene_durations[5], "subtitle": subtitle_lines[5] if len(subtitle_lines) > 5 else "FOLLOW FOR MORE AI TOOLS"},
+        {"query": keywords[0], "duration": scene_durations[5], "subtitle": subtitle_lines[5] if len(subtitle_lines) > 5 else random.choice(cta_options)},
     ]
 
     downloaded = []
@@ -1154,7 +1155,15 @@ def create_stock_video_reel(content, output_dir):
 def create_slideshow_reel(content, output_dir):
     bg_img = fetch_background_image(content["image_keyword"])
     points = content["points"][:4]
-    hook_subtitle = content.get("hook_subtitle") or "Wait till you see the last one."
+    import random
+    hook_subtitles_options = [
+        "Wait till you see the last one.",
+        "These will change everything.",
+        "You've been doing it wrong.",
+        "Must-have tools for this year.",
+        "I can't believe these are free."
+    ]
+    hook_subtitle = content.get("hook_subtitle") or random.choice(hook_subtitles_options)
     subtitle_lines = content.get("subtitle_lines") or []
     voice_path = create_voiceover(
         content["voiceover_script"],
@@ -1223,8 +1232,9 @@ def create_slideshow_reel(content, output_dir):
         layout="hook",
     )
     cta_clip = build_motion_clip(cta_frame, duration=scene_durations[5], zoom_start=1.0, zoom_end=1.06)
+    cta_options_slide = ["FOLLOW FOR MORE AI TOOLS", "HIT FOLLOW FOR MORE", "SUBSCRIBE FOR PART 2", "LIKE & FOLLOW FOR MORE", "DON'T MISS TOMORROW'S TOOLS"]
     cta_subtitles = create_subtitle_overlay(
-        subtitle_lines[5] if len(subtitle_lines) > 5 else "FOLLOW FOR MORE AI TOOLS",
+        subtitle_lines[5] if len(subtitle_lines) > 5 else random.choice(cta_options_slide),
         scene_durations[5],
     )
     clips.append(CompositeVideoClip([cta_clip, cta_subtitles.set_position(("center", "bottom"))]).set_duration(scene_durations[5]))
@@ -1273,14 +1283,18 @@ def create_reel_video(
     output_dir = os.path.join(os.getcwd(), "output")
     video_prompt = build_video_prompt(title, points, image_keyword, video_prompt)
     content["video_prompt"] = video_prompt
-    content["voiceover_script"] = voiceover_script or (
-        f"Did you know these {len(points[:4])} AI tools exist? "
-        + " ".join(
-            f"Number {index + 1}: {point}."
-            for index, point in enumerate(points[:4])
-        )
-        + " Follow for more AI tools."
-    )
+    if voiceover_script:
+        content["voiceover_script"] = voiceover_script
+    else:
+        pts = points[:4]
+        script_options = [
+            f"Did you know these {len(pts)} AI tools exist? " + " ".join(f"Number {index + 1}: {point}." for index, point in enumerate(pts)) + " Follow for more AI tools.",
+            f"Stop doing things the hard way! Check out these {len(pts)} AI tools. " + " ".join(f"First, {point}." if index == 0 else (f"Next, {point}." if index < len(pts)-1 else f"Finally, {point}.") for index, point in enumerate(pts)) + " Don't forget to follow!",
+            f"Here are {len(pts)} insane AI tools that feel illegal to know. " + " ".join(f"Tool {index + 1}: {point}." for index, point in enumerate(pts)) + " Hit follow for more tech secrets.",
+            f"These {len(pts)} AI tools will literally save you hours. " + " ".join(f"{index + 1}. {point}." for index, point in enumerate(pts)) + " Follow me to stay updated on AI trends.",
+            f"Top {len(pts)} AI websites you should be using right now. " + " ".join(f"At {index + 1}, we have {point}." for index, point in enumerate(pts)) + " Follow for more daily AI hacks."
+        ]
+        content["voiceover_script"] = random.choice(script_options)
     prompt_path, metadata_path = save_video_assets(output_dir, content, video_prompt)
 
     print("🎥 AI video prompt ready:")

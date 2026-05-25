@@ -31,6 +31,7 @@ jobs:
       - name: Generate story short
         env:
           SHORTS_RENDER_MODE:      ${{ vars.SHORTS_RENDER_MODE }}
+          VEO_MODEL:               ${{ vars.VEO_MODEL }}
           HERA_API_KEY:            ${{ secrets.HERA_API_KEY }}
           GEMINI_API_KEY:          ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY:          ${{ secrets.PEXELS_API_KEY }}

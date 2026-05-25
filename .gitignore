@@ -1,0 +1,12 @@
+# Local environment variables
+.env
+
+# Python caching
+__pycache__/
+*.pyc
+
+# Local script output files
+output/
+*.mp3
+*.mp4
+*.m4a
