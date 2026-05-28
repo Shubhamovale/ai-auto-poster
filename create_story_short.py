@@ -28,6 +28,7 @@ from create_video import (
     fit_vertical_clip,
     generate_hera_scene_video,
     generate_veo_scene_video,
+    generate_higgsfield_scene_video,
     split_sentences,
     fetch_pexels_video,
     fetch_ai_image,
@@ -37,7 +38,9 @@ from create_video import (
 HERA_SCENE_COUNT = int(os.environ.get("HERA_SCENE_COUNT", "4"))
 # Default Veo mode to exactly 3 generated clips, then stitch them into one short.
 VEO_SCENE_COUNT = int(os.environ.get("VEO_SCENE_COUNT", "3"))
+HIGGSFIELD_SCENE_COUNT = int(os.environ.get("HIGGSFIELD_SCENE_COUNT", "3"))
 SHORTS_RENDER_MODE = os.environ.get("SHORTS_RENDER_MODE", "pexels").strip().lower()
+
 
 
 def build_scene_durations(total_duration, spoken_beats, end_pad=0.0):
@@ -460,6 +463,73 @@ def render_ai_image_story_short(content, scene_plan, scene_durations, output_dir
     return output_path
 
 
+def render_higgsfield_story_short(content, scene_plan, scene_durations, output_dir, target_duration, voiceover):
+    scene_groups = group_story_scenes(scene_plan, scene_durations, HIGGSFIELD_SCENE_COUNT)
+    generated_paths = []
+    clips = []
+
+    for index, group in enumerate(scene_groups):
+        prompt = build_group_prompt(group, index)
+        scene_path = os.path.join(output_dir, f"story_scene_higgsfield_{index + 1}.mp4")
+        group_duration = max(2.0, min(12.0, sum(group["durations"]) + 0.4))
+        generated_paths.append(generate_higgsfield_scene_video(prompt, scene_path, duration_seconds=group_duration))
+
+    for group, scene_path in zip(scene_groups, generated_paths):
+        base_clip = VideoFileClip(scene_path)
+        group_scene_count = len(group["scenes"])
+        clip_duration = max(float(base_clip.duration or 0), 0.1)
+        segment_length = clip_duration / max(group_scene_count, 1)
+
+        for local_index, scene in enumerate(group["scenes"]):
+            scene_duration = group["durations"][local_index]
+            start = min(segment_length * local_index, max(clip_duration - 0.05, 0))
+            end = min(clip_duration, start + segment_length)
+            if end - start < 0.2:
+                start = 0
+                end = clip_duration
+
+            segment_clip = base_clip.subclip(start, end)
+            clip = fit_vertical_clip(segment_clip, scene_duration)
+            transition = scene.get("transition")
+            clip = apply_transition_to_clip(clip, transition)
+            subtitle = scene.get("subtitle") or content["hook"]
+            subtitle_clip = create_subtitle_overlay(subtitle, scene_duration)
+            layers = [clip, subtitle_clip]
+            flash_clip = build_transition_flash(transition, scene_duration)
+            if flash_clip is not None:
+                layers.append(flash_clip)
+            composed = CompositeVideoClip(layers).set_duration(scene_duration)
+            clips.append(composed)
+
+        base_clip.close()
+
+    final_video = concatenate_videoclips(clips, method="compose").set_duration(target_duration)
+    voice_track = voiceover.set_start(0).volumex(1.0)
+    music = create_background_music(target_duration).set_duration(target_duration).volumex(0.16)
+    mixed_audio = CompositeAudioClip([music, voice_track]).set_duration(target_duration)
+    final_video = final_video.set_audio(mixed_audio)
+
+    output_path = os.path.join(output_dir, "story_short.mp4")
+    final_video.write_videofile(
+        output_path,
+        fps=30,
+        codec="libx264",
+        audio_codec="aac",
+        temp_audiofile=os.path.join(output_dir, "story_temp_audio.m4a"),
+        remove_temp=True,
+        logger=None,
+    )
+
+    for clip in clips:
+        clip.close()
+    for path in generated_paths:
+        if os.path.exists(path):
+            os.remove(path)
+    mixed_audio.close()
+    final_video.close()
+    return output_path
+
+
 def render_veo_story_short(content, scene_plan, scene_durations, output_dir, target_duration, voiceover):
     scene_groups = group_story_scenes(scene_plan, scene_durations, 3)
     generated_paths = []
@@ -759,6 +829,26 @@ def create_story_short(content):
             )
         except Exception as exc:
             print(f"Veo render failed: {exc}. Falling back to Pexels renderer...")
+            output_path = render_pexels_story_short(
+                content,
+                scene_plan,
+                scene_durations,
+                output_dir,
+                target_duration,
+                voiceover,
+            )
+    elif SHORTS_RENDER_MODE == "higgsfield":
+        try:
+            output_path = render_higgsfield_story_short(
+                content,
+                scene_plan,
+                scene_durations,
+                output_dir,
+                target_duration,
+                voiceover,
+            )
+        except Exception as exc:
+            print(f"Higgsfield render failed: {exc}. Falling back to Pexels renderer...")
             output_path = render_pexels_story_short(
                 content,
                 scene_plan,

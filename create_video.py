@@ -39,14 +39,21 @@ ALLOW_STOCK_FALLBACK = os.environ.get("ALLOW_STOCK_FALLBACK", "false").strip().l
     "yes",
 }
 HERA_API_KEY = os.environ.get("HERA_API_KEY", "").strip()
-HERA_RESOLUTION = os.environ.get("HERA_RESOLUTION", "720p")
+HERA_RESOLUTION = os.environ.get("HERA_RESOLUTION", "720p").strip()
 HERA_FPS = os.environ.get("HERA_FPS", "30")
 HERA_POLL_SECONDS = int(os.environ.get("HERA_POLL_SECONDS", "10"))
 HERA_MAX_POLLS = int(os.environ.get("HERA_MAX_POLLS", "36"))
-VEO_MODEL = os.environ.get("VEO_MODEL", "veo-3.1-generate-preview")
-VEO_RESOLUTION = os.environ.get("VEO_RESOLUTION", "720p")
+VEO_MODEL = os.environ.get("VEO_MODEL", "veo-3.1-generate-preview").strip()
+VEO_RESOLUTION = os.environ.get("VEO_RESOLUTION", "720p").strip()
 VEO_DURATION_SECONDS = int(os.environ.get("VEO_DURATION_SECONDS", "8"))
 VEO_POLL_SECONDS = int(os.environ.get("VEO_POLL_SECONDS", "10"))
+HIGGSFIELD_API_KEY = os.environ.get("HIGGSFIELD_API_KEY", "").strip()
+HIGGSFIELD_MODEL = os.environ.get("HIGGSFIELD_MODEL", "wan-2.5").strip()
+HIGGSFIELD_RESOLUTION = os.environ.get("HIGGSFIELD_RESOLUTION", "9:16").strip()
+HIGGSFIELD_DURATION_SECONDS = int(os.environ.get("HIGGSFIELD_DURATION_SECONDS", "8"))
+HIGGSFIELD_POLL_SECONDS = int(os.environ.get("HIGGSFIELD_POLL_SECONDS", "10"))
+HIGGSFIELD_MAX_POLLS = int(os.environ.get("HIGGSFIELD_MAX_POLLS", "36"))
+
 
 
 def fetch_background_image(keyword):
@@ -659,6 +666,85 @@ def generate_hera_scene_video(prompt, output_path, duration_seconds=4):
 
     download_file(file_url, output_path)
     return output_path
+
+
+def generate_higgsfield_scene_video(prompt, output_path, duration_seconds=8):
+    if not HIGGSFIELD_API_KEY:
+        raise RuntimeError("HIGGSFIELD_API_KEY is required for Higgsfield video generation.")
+
+    headers = {
+        "Authorization": f"Bearer {HIGGSFIELD_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "task": "text-to-video",
+        "model": HIGGSFIELD_MODEL,
+        "prompt": prompt,
+        "duration": max(1, min(60, int(round(duration_seconds)))),
+        "aspect_ratio": HIGGSFIELD_RESOLUTION,
+    }
+
+    print(f"Triggering Higgsfield video generation with model={HIGGSFIELD_MODEL}...")
+    create_response = requests.post(
+        "https://api.higgsfield.ai/v1/generations",
+        headers=headers,
+        json=payload,
+        timeout=60,
+    )
+    create_response.raise_for_status()
+    resp_json = create_response.json()
+    generation_id = resp_json.get("id") or resp_json.get("generation_id") or resp_json.get("request_id")
+    if not generation_id:
+        raise RuntimeError(f"Higgsfield response did not contain a generation ID: {resp_json}")
+
+    status_url = f"https://api.higgsfield.ai/v1/generations/{generation_id}"
+    
+    def find_url(data):
+        if isinstance(data, str):
+            if data.startswith("http") and (".mp4" in data or "video" in data or "higgsfield" in data):
+                return data
+        elif isinstance(data, dict):
+            for val in data.values():
+                res = find_url(val)
+                if res:
+                    return res
+        elif isinstance(data, list):
+            for val in data:
+                res = find_url(val)
+                if res:
+                    return res
+        return None
+
+    last_payload = None
+    for poll_index in range(HIGGSFIELD_MAX_POLLS):
+        time.sleep(HIGGSFIELD_POLL_SECONDS if poll_index else 0)
+        print(f"Polling Higgsfield generation {generation_id} (attempt {poll_index + 1}/{HIGGSFIELD_MAX_POLLS})...")
+        status_response = requests.get(status_url, headers=headers, timeout=60)
+        status_response.raise_for_status()
+        last_payload = status_response.json()
+        
+        status = str(last_payload.get("status") or last_payload.get("state") or "").lower()
+        if status in {"completed", "succeeded", "success"}:
+            break
+        if status in {"failed", "error"}:
+            error_msg = last_payload.get("error") or last_payload.get("message") or "Unknown API error"
+            raise RuntimeError(f"Higgsfield video generation failed: {error_msg}")
+    else:
+        raise RuntimeError(f"Higgsfield video generation timed out for {generation_id}.")
+
+    file_url = (
+        last_payload.get("video_url")
+        or last_payload.get("media_url")
+        or last_payload.get("file_url")
+        or find_url(last_payload)
+    )
+    if not file_url:
+        raise RuntimeError(f"Higgsfield generation succeeded but no video URL was found in response: {last_payload}")
+
+    print(f"Downloading Higgsfield video from {file_url}...")
+    download_file(file_url, output_path)
+    return output_path
+
 
 
 def _draw_hero_reveal(draw, size, visual_world):

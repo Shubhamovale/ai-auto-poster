@@ -35,6 +35,11 @@ jobs:
           VEO_RESOLUTION:          ${{ vars.VEO_RESOLUTION }}
           VEO_DURATION_SECONDS:    ${{ vars.VEO_DURATION_SECONDS }}
           VEO_SCENE_COUNT:         ${{ vars.VEO_SCENE_COUNT }}
+          HIGGSFIELD_API_KEY:      ${{ secrets.HIGGSFIELD_API_KEY }}
+          HIGGSFIELD_MODEL:          ${{ vars.HIGGSFIELD_MODEL }}
+          HIGGSFIELD_RESOLUTION:        ${{ vars.HIGGSFIELD_RESOLUTION }}
+          HIGGSFIELD_DURATION_SECONDS:  ${{ vars.HIGGSFIELD_DURATION_SECONDS }}
+          HIGGSFIELD_SCENE_COUNT:       ${{ vars.HIGGSFIELD_SCENE_COUNT }}
           HERA_API_KEY:            ${{ secrets.HERA_API_KEY }}
           GEMINI_API_KEY:          ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY:          ${{ secrets.PEXELS_API_KEY }}
