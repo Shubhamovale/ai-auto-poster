@@ -11,12 +11,12 @@ from trending_topics import get_random_topic
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_CONTENT_MODEL = os.environ.get("OPENAI_CONTENT_MODEL", "gpt-4o-mini")
-OPENAI_MAX_RETRIES = int(os.environ.get("OPENAI_MAX_RETRIES", "3"))
-OPENAI_RETRY_BASE_SECONDS = int(os.environ.get("OPENAI_RETRY_BASE_SECONDS", "5"))
-OPENAI_TIMEOUT_SECONDS = int(os.environ.get("OPENAI_TIMEOUT_SECONDS", "90"))
+OPENAI_MAX_RETRIES = int(os.environ.get("OPENAI_MAX_RETRIES", "") or "3")
+OPENAI_RETRY_BASE_SECONDS = int(os.environ.get("OPENAI_RETRY_BASE_SECONDS", "") or "5")
+OPENAI_TIMEOUT_SECONDS = int(os.environ.get("OPENAI_TIMEOUT_SECONDS", "") or "90")
 GEMINI_CONTENT_MODEL = os.environ.get("GEMINI_CONTENT_MODEL", "models/gemini-2.5-flash")
-GEMINI_MAX_RETRIES = int(os.environ.get("GEMINI_MAX_RETRIES", "4"))
-GEMINI_RETRY_BASE_SECONDS = int(os.environ.get("GEMINI_RETRY_BASE_SECONDS", "6"))
+GEMINI_MAX_RETRIES = int(os.environ.get("GEMINI_MAX_RETRIES", "") or "4")
+GEMINI_RETRY_BASE_SECONDS = int(os.environ.get("GEMINI_RETRY_BASE_SECONDS", "") or "6")
 
 
 def build_story_prompt(topic):

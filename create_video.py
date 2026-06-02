@@ -31,7 +31,7 @@ if not hasattr(Image, "ANTIALIAS"):
     Image.ANTIALIAS = Image.Resampling.LANCZOS
 
 
-VOICEOVER_SPEED = float(os.environ.get("VOICEOVER_SPEED", "1.12"))
+VOICEOVER_SPEED = float(os.environ.get("VOICEOVER_SPEED", "") or "1.12")
 DEFAULT_ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"
 ALLOW_STOCK_FALLBACK = os.environ.get("ALLOW_STOCK_FALLBACK", "false").strip().lower() in {
     "1",
@@ -41,18 +41,18 @@ ALLOW_STOCK_FALLBACK = os.environ.get("ALLOW_STOCK_FALLBACK", "false").strip().l
 HERA_API_KEY = os.environ.get("HERA_API_KEY", "").strip()
 HERA_RESOLUTION = os.environ.get("HERA_RESOLUTION", "720p").strip()
 HERA_FPS = os.environ.get("HERA_FPS", "30")
-HERA_POLL_SECONDS = int(os.environ.get("HERA_POLL_SECONDS", "10"))
-HERA_MAX_POLLS = int(os.environ.get("HERA_MAX_POLLS", "36"))
+HERA_POLL_SECONDS = int(os.environ.get("HERA_POLL_SECONDS", "") or "10")
+HERA_MAX_POLLS = int(os.environ.get("HERA_MAX_POLLS", "") or "36")
 VEO_MODEL = os.environ.get("VEO_MODEL", "veo-3.1-generate-preview").strip()
 VEO_RESOLUTION = os.environ.get("VEO_RESOLUTION", "720p").strip()
-VEO_DURATION_SECONDS = int(os.environ.get("VEO_DURATION_SECONDS", "8"))
-VEO_POLL_SECONDS = int(os.environ.get("VEO_POLL_SECONDS", "10"))
+VEO_DURATION_SECONDS = int(os.environ.get("VEO_DURATION_SECONDS", "") or "8")
+VEO_POLL_SECONDS = int(os.environ.get("VEO_POLL_SECONDS", "") or "10")
 HIGGSFIELD_API_KEY = os.environ.get("HIGGSFIELD_API_KEY", "").strip()
 HIGGSFIELD_MODEL = os.environ.get("HIGGSFIELD_MODEL", "wan-2.5").strip()
 HIGGSFIELD_RESOLUTION = os.environ.get("HIGGSFIELD_RESOLUTION", "9:16").strip()
-HIGGSFIELD_DURATION_SECONDS = int(os.environ.get("HIGGSFIELD_DURATION_SECONDS", "8"))
-HIGGSFIELD_POLL_SECONDS = int(os.environ.get("HIGGSFIELD_POLL_SECONDS", "10"))
-HIGGSFIELD_MAX_POLLS = int(os.environ.get("HIGGSFIELD_MAX_POLLS", "36"))
+HIGGSFIELD_DURATION_SECONDS = int(os.environ.get("HIGGSFIELD_DURATION_SECONDS", "") or "8")
+HIGGSFIELD_POLL_SECONDS = int(os.environ.get("HIGGSFIELD_POLL_SECONDS", "") or "10")
+HIGGSFIELD_MAX_POLLS = int(os.environ.get("HIGGSFIELD_MAX_POLLS", "") or "36")
 
 
 

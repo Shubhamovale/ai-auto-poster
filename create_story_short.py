@@ -35,10 +35,10 @@ from create_video import (
     download_file,
 )
 
-HERA_SCENE_COUNT = int(os.environ.get("HERA_SCENE_COUNT", "4"))
+HERA_SCENE_COUNT = int(os.environ.get("HERA_SCENE_COUNT", "") or "4")
 # Default Veo mode to exactly 3 generated clips, then stitch them into one short.
-VEO_SCENE_COUNT = int(os.environ.get("VEO_SCENE_COUNT", "3"))
-HIGGSFIELD_SCENE_COUNT = int(os.environ.get("HIGGSFIELD_SCENE_COUNT", "3"))
+VEO_SCENE_COUNT = int(os.environ.get("VEO_SCENE_COUNT", "") or "3")
+HIGGSFIELD_SCENE_COUNT = int(os.environ.get("HIGGSFIELD_SCENE_COUNT", "") or "3")
 SHORTS_RENDER_MODE = os.environ.get("SHORTS_RENDER_MODE", "pexels").strip().lower()
 
 
