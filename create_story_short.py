@@ -301,14 +301,78 @@ def extract_pexels_query(sentence_text, fallback):
 
 
 def get_topic_search_term(topic):
-    normalized = (topic or "").lower()
-    if "michael jackson" in normalized or "jackson" in normalized:
-        return "michael jackson dance"
-    if "wednesday" in normalized:
-        return "gothic dance dark"
-    if "stranger things" in normalized:
-        return "80s retro sci-fi"
+    import re
+    if not topic:
+        return "technology"
+        
+    normalized = topic.lower()
+    
+    # 1. Netflix check: if it is generally about Netflix
+    if "netflix" in normalized:
+        if any(term in normalized for term in ["stock", "shares", "company", "earnings", "ceo"]):
+            return "netflix office"
+            
+    # 2. Clean up newsy words to extract the core movie / show title
+    clean = topic
+    # Remove network names / platform names from title extraction
+    clean = re.sub(r'(?i)\b(on netflix|netflix\'s|netflix|hbo|disney\+)\b', '', clean)
+    # Remove newsy nouns/verbs/adjectives
+    clean = re.sub(r'(?i)\b(teaser|trailer|first look|official trailer|clip|review|update[s]?|cast|release date|release window|announcement|behind the scenes|set photos|leaks|filming|title reveal|revealed|blowing up|viral|trending|releasing|coming to|coming|must watch|shows|series|movies|movie|theaters|cinema|streaming)\b', '', clean)
+    # Remove common grammar connector words
+    clean = re.sub(r'(?i)\b(and|or|of|in|to|for|with|about|on|at|by|from|the|a|an)\b', '', clean)
+    # Clean up spaces
+    clean = re.sub(r'[^\w\s]', ' ', clean)
+    clean = " ".join(clean.split())
+    
+    if not clean or clean.lower() in {"us", "usa", "today", "now", "news", "week", "month"}:
+        if "netflix" in normalized:
+            return "netflix screen watching"
+        return "cinema theater movies"
+        
+    if len(clean.split()) <= 4:
+        return clean.strip()
+        
+    words = clean.split()
+    if words:
+        return " ".join(words[:3])
+        
     return topic
+
+
+def get_pexels_fallback_terms(topic):
+    normalized = (topic or "").lower()
+    
+    # Map major blockbusters/subjects to visual styles
+    if "stranger things" in normalized:
+        return ["80s retro sci-fi", "kids bikes flashlight", "neon synthwave"]
+    if "wednesday" in normalized:
+        return ["gothic dark academy", "black dress gothic", "creepy cello playing"]
+    if "squid game" in normalized:
+        return ["masked guard pink jumpsuit", "playground game survival", "green tracksuit runner"]
+    if "avatar" in normalized:
+        return ["blue alien face", "bioluminescent jungle", "cgi fantasy world"]
+    if "spider-man" in normalized or "spiderman" in normalized:
+        return ["superhero silhouette roof", "spider web close up", "city skyline night"]
+    if "marvel" in normalized or "avengers" in normalized or "iron man" in normalized:
+        return ["superhero armor", "sci-fi portal blast", "action movie explosion"]
+    if "star wars" in normalized or "jedi" in normalized:
+        return ["space battle nebula", "neon sword fight", "futuristic space ship"]
+    if "batman" in normalized or "dark knight" in normalized:
+        return ["dark city rain gothic", "black cape shadow", "bats flying cave"]
+    if "joker" in normalized:
+        return ["evil clown makeup", "city street night dramatic", "laughing crazy man"]
+    if "michael jackson" in normalized or "jackson" in normalized:
+        return ["michael jackson dance", "pop dancer stage concert", "music performance concert"]
+        
+    # Standard platforms and generic fallbacks
+    if "netflix" in normalized:
+        return ["netflix screen watching", "streaming app interface", "couch watching tv red glow"]
+    if "hbo" in normalized or "max" in normalized:
+        return ["premium drama intro", "television screen remote"]
+    if "disney" in normalized:
+        return ["castle fireworks", "fantasy magic sparkle"]
+        
+    return ["cinema projector light", "popcorn movie theater", "hollywood cinema audience"]
 
 
 def render_pexels_story_short(content, scene_plan, scene_durations, output_dir, target_duration, voiceover):
@@ -336,14 +400,23 @@ def render_pexels_story_short(content, scene_plan, scene_durations, output_dir, 
             
             # Smart fallback hierarchy to keep video on-topic
             if not link and len(keyword.split()) > 1:
-                # Try fallback directly to the topic term (e.g. "michael jackson dance")
+                # Try fallback directly to the topic term (e.g. "Avatar 3")
                 print(f"NO PEXELS VIDEO FOR '{keyword}', FALLING BACK TO TOPIC TERM '{topic_term}'...")
                 link = fetch_pexels_video(topic_term)
                 
+            # If still no link, try the visual mood fallbacks
+            if not link:
+                fallbacks = get_pexels_fallback_terms(topic)
+                for fallback_query in fallbacks:
+                    print(f"NO PEXELS VIDEO YET, TRYING MOOD FALLBACK: '{fallback_query}'...")
+                    link = fetch_pexels_video(fallback_query)
+                    if link:
+                        break
+                        
+            # Absolute fallback to generic keyword
             if not link and len(keyword.split()) > 1:
-                # Try broadening search by taking the first word
                 fallback_word = keyword.split()[0]
-                print(f"NO PEXELS VIDEO FOR '{topic_term}', FALLING BACK TO FIRST WORD '{fallback_word}'...")
+                print(f"FALLING BACK TO FIRST WORD '{fallback_word}'...")
                 link = fetch_pexels_video(fallback_word)
                 
             if not link:
