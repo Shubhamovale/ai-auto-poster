@@ -300,6 +300,17 @@ def extract_pexels_query(sentence_text, fallback):
     return fallback
 
 
+def get_topic_search_term(topic):
+    normalized = (topic or "").lower()
+    if "michael jackson" in normalized or "jackson" in normalized:
+        return "michael jackson dance"
+    if "wednesday" in normalized:
+        return "gothic dance dark"
+    if "stranger things" in normalized:
+        return "80s retro sci-fi"
+    return topic
+
+
 def render_pexels_story_short(content, scene_plan, scene_durations, output_dir, target_duration, voiceover):
     clips = []
     downloaded_paths = []
@@ -308,17 +319,33 @@ def render_pexels_story_short(content, scene_plan, scene_durations, output_dir, 
         scene_duration = scene_durations[index]
         subtitle_text = scene.get("subtitle") or scene.get("line") or content.get("hook", "")
         
-        # Dynamically map the video strictly to what the text says
-        keyword = extract_pexels_query(subtitle_text, content.get("topic") or "technology")
+        # Dynamically map the video to the topic context and the scene text
+        topic = content.get("topic") or "technology"
+        topic_term = get_topic_search_term(topic)
+        extracted = extract_pexels_query(subtitle_text, topic_term)
+        
+        # Combine the subject topic with the specific action word to stay contextual
+        if topic_term and topic_term.lower() not in {"technology", "news", "entertainment", "business"}:
+            keyword = f"{topic_term} {extracted}" if extracted != topic_term else topic_term
+        else:
+            keyword = extracted
         
         try:
             print(f"FETCHING PEXELS VIDEO FOR: {keyword}")
             link = fetch_pexels_video(keyword)
+            
+            # Smart fallback hierarchy to keep video on-topic
             if not link and len(keyword.split()) > 1:
-                # Try broadening search
+                # Try fallback directly to the topic term (e.g. "michael jackson dance")
+                print(f"NO PEXELS VIDEO FOR '{keyword}', FALLING BACK TO TOPIC TERM '{topic_term}'...")
+                link = fetch_pexels_video(topic_term)
+                
+            if not link and len(keyword.split()) > 1:
+                # Try broadening search by taking the first word
                 fallback_word = keyword.split()[0]
-                print(f"NO PEXELS VIDEO FOR '{keyword}', FALLING BACK TO '{fallback_word}'...")
+                print(f"NO PEXELS VIDEO FOR '{topic_term}', FALLING BACK TO FIRST WORD '{fallback_word}'...")
                 link = fetch_pexels_video(fallback_word)
+                
             if not link:
                 print(f"NO PEXELS VIDEO SHOWN, TRYING GENERIC FALLBACK...")
                 link = fetch_pexels_video(content.get("topic") or "technology")

@@ -267,22 +267,12 @@ def _subtitle_from_beat(text, fallback):
 
 
 def _boost_hook_line(text, index):
-    cleaned = " ".join((text or "").split())
-    if not cleaned:
-        return cleaned
-
-    templates = [
-        lambda value: value,
-        lambda value: f"Then this happened: {value}" if not value.lower().startswith("then") else value,
-        lambda value: f"And it got bigger fast: {value}" if "bigger" not in value.lower() else value,
-    ]
-    return templates[min(index, len(templates) - 1)](cleaned)
+    return " ".join((text or "").split())
 
 
 def _boost_hook_subtitle(text, index):
-    cleaned = _subtitle_from_beat(text, text)
-    presets = ["WAIT WHAT", "THEN THIS", "IT GETS BIGGER"]
-    return presets[index] if index < len(presets) else cleaned
+    return _subtitle_from_beat(text, text)
+
 
 
 def _viral_cta_line(content):
