@@ -10,10 +10,9 @@ import requests
 
 
 NEWS_QUERIES = [
-    ("AI", "latest AI tools OR ChatGPT OR OpenAI OR Google AI when:1d"),
-    ("Tech", "technology trend OR viral app OR startup when:1d"),
-    ("Entertainment", "movie trailer OR netflix OR marvel OR gaming OR playstation OR xbox when:1d"),
-    ("Business", "stock market OR business trend OR company launch when:1d"),
+    ("Netflix", "netflix trailer OR netflix release OR netflix original OR netflix show when:1d"),
+    ("Movies", "new movie trailer OR upcoming movie release OR cinema announcement when:1d"),
+    ("Entertainment", "hollywood movie trailer OR blockbuster trailer release OR marvel trailer when:1d"),
 ]
 
 WEAK_PATTERNS = [
@@ -48,22 +47,29 @@ def is_strong_headline(headline):
     for pattern in WEAK_PATTERNS:
         if re.search(pattern, normalized):
             return False
-    # Prefer entertainment-style trigger words for the default poster format.
+    # Prefer movie/series/netflix-style trigger words.
     strong_terms = [
         "trailer",
-        "marvel",
         "netflix",
         "movie",
-        "game",
-        "gaming",
-        "playstation",
-        "xbox",
-        "studio",
-        "streaming",
+        "cinema",
+        "film",
+        "release",
+        "premier",
+        "teaser",
+        "show",
+        "series",
         "season",
-        "box office",
+        "cast",
+        "hbo",
+        "disney+",
+        "streaming",
+        "marvel",
+        "dc universe",
+        "blockbuster",
     ]
     return any(term in normalized for term in strong_terms)
+
 
 
 def parse_rss_items(xml_text):

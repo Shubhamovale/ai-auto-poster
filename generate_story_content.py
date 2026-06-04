@@ -100,8 +100,9 @@ Rules:
 - If the story mentions a brand or copyrighted title, use brand-safe proxy visuals.
 - Example: for Netflix use streaming app UI, couch watching, TV thumbnails, remote control, red interface glow.
 - Subtitle lines must be short and readable on mobile.
-- Focus on entertainment, movie, gaming, or viral-tech story framing.
+- Focus strictly on Netflix releases, upcoming movies, trailer updates, and exciting entertainment news tailored for the US audience. Make it feel personal, engaging, and oriented toward what people are excited about.
 """
+
 
 
 def _trim_subtitle(text, fallback):
