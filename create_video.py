@@ -171,7 +171,7 @@ def create_text_frame(
             y_sub += 55
 
     draw.rectangle([0, 1815, 1080, 1920], fill=accent_color)
-    draw.text((30, 1844), "FOLLOW FOR DAILY AI SHORTS", font=font_brand, fill="white")
+    draw.text((30, 1844), "SUBSCRIBE FOR DAILY MOVIE SHORTS", font=font_brand, fill="white")
 
     return np.array(img)
 
@@ -1191,7 +1191,7 @@ def create_stock_video_reel(content, output_dir):
     target_duration = max(15.0, voiceover.duration + 0.8)
     scene_durations = build_scene_durations(target_duration, 6)
 
-    cta_options = ["FOLLOW FOR MORE AI TOOLS", "HIT FOLLOW FOR MORE", "SUBSCRIBE FOR PART 2", "LIKE & FOLLOW FOR MORE", "DON'T MISS TOMORROW'S TOOLS"]
+    cta_options = ["SUBSCRIBE FOR MORE MOVIE NEWS", "HIT SUBSCRIBE FOR MORE", "SUBSCRIBE FOR PART 2", "LIKE & SUBSCRIBE FOR MORE", "DON'T MISS THE NEXT TRAILER"]
     scene_specs = [
         {"query": keywords[0], "duration": scene_durations[0], "subtitle": subtitle_lines[0] if len(subtitle_lines) > 0 else content["title"]},
         {"query": keywords[1] if len(keywords) > 1 else points[0], "duration": scene_durations[1], "subtitle": subtitle_lines[1] if len(subtitle_lines) > 1 else points[0]},
@@ -1325,15 +1325,15 @@ def create_slideshow_reel(content, output_dir):
 
     cta_frame = create_text_frame(
         bg_img,
-        "FOLLOW FOR PART 2",
-        subtitle="More AI tools coming daily",
+        "SUBSCRIBE FOR PART 2",
+        subtitle="New movie updates daily",
         text_color="#00FF88",
         font_size=78,
         accent_color=(6, 214, 160),
         layout="hook",
     )
     cta_clip = build_motion_clip(cta_frame, duration=scene_durations[5], zoom_start=1.0, zoom_end=1.06)
-    cta_options_slide = ["FOLLOW FOR MORE AI TOOLS", "HIT FOLLOW FOR MORE", "SUBSCRIBE FOR PART 2", "LIKE & FOLLOW FOR MORE", "DON'T MISS TOMORROW'S TOOLS"]
+    cta_options_slide = ["SUBSCRIBE FOR MORE MOVIE NEWS", "HIT SUBSCRIBE FOR MORE", "SUBSCRIBE FOR PART 2", "LIKE & SUBSCRIBE FOR MORE", "DON'T MISS THE NEXT TRAILER"]
     cta_subtitles = create_subtitle_overlay(
         subtitle_lines[5] if len(subtitle_lines) > 5 else random.choice(cta_options_slide),
         scene_durations[5],
@@ -1389,11 +1389,11 @@ def create_reel_video(
     else:
         pts = points[:4]
         script_options = [
-            f"Did you know these {len(pts)} AI tools exist? " + " ".join(f"Number {index + 1}: {point}." for index, point in enumerate(pts)) + " Follow for more AI tools.",
-            f"Stop doing things the hard way! Check out these {len(pts)} AI tools. " + " ".join(f"First, {point}." if index == 0 else (f"Next, {point}." if index < len(pts)-1 else f"Finally, {point}.") for index, point in enumerate(pts)) + " Don't forget to follow!",
-            f"Here are {len(pts)} insane AI tools that feel illegal to know. " + " ".join(f"Tool {index + 1}: {point}." for index, point in enumerate(pts)) + " Hit follow for more tech secrets.",
-            f"These {len(pts)} AI tools will literally save you hours. " + " ".join(f"{index + 1}. {point}." for index, point in enumerate(pts)) + " Follow me to stay updated on AI trends.",
-            f"Top {len(pts)} AI websites you should be using right now. " + " ".join(f"At {index + 1}, we have {point}." for index, point in enumerate(pts)) + " Follow for more daily AI hacks."
+            f"Are you ready for these {len(pts)} movie updates? " + " ".join(f"Number {index + 1}: {point}." for index, point in enumerate(pts)) + " Subscribe for more movie news.",
+            f"These upcoming movies look insane! " + " ".join(f"First, {point}." if index == 0 else (f"Next, {point}." if index < len(pts)-1 else f"Finally, {point}.") for index, point in enumerate(pts)) + " Don't forget to subscribe!",
+            f"Here are {len(pts)} Netflix shows you need to watch. " + " ".join(f"Show {index + 1}: {point}." for index, point in enumerate(pts)) + " Hit subscribe for more streaming secrets.",
+            f"These new trailers will literally blow your mind. " + " ".join(f"{index + 1}. {point}." for index, point in enumerate(pts)) + " Subscribe to stay updated on upcoming releases.",
+            f"Top {len(pts)} movie releases you should watch right now. " + " ".join(f"At {index + 1}, we have {point}." for index, point in enumerate(pts)) + " Subscribe for more daily cinema hacks."
         ]
         content["voiceover_script"] = random.choice(script_options)
     prompt_path, metadata_path = save_video_assets(output_dir, content, video_prompt)

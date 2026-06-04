@@ -96,7 +96,7 @@ Rules:
 - Make each scene visually distinct from the one before it.
 - Each `subtitle` should be 2 to 6 words only.
 - Each `line` should feel like one short spoken beat, not a paragraph.
-- The final scene should end with a viral CTA beat like "would you try this?", "part 2?", "comment now", or "follow for more".
+- The final scene should end with a viral CTA beat like "would you try this?", "part 2?", "comment now", or "subscribe for more updates".
 - If the story mentions a brand or copyrighted title, use brand-safe proxy visuals.
 - Example: for Netflix use streaming app UI, couch watching, TV thumbnails, remote control, red interface glow.
 - Subtitle lines must be short and readable on mobile.
@@ -279,11 +279,11 @@ def _viral_cta_line(content):
     title = " ".join((content.get("title") or "").split())
     hook = " ".join((content.get("hook") or "").split())
     source = title or hook or "this story"
-    return f"Would you try this yourself? Follow for part two on {source}."
+    return f"Would you watch this? Subscribe for more updates on {source}."
 
 
 def _viral_cta_subtitle():
-    return "FOLLOW FOR PART 2"
+    return "SUBSCRIBE FOR MORE"
 
 
 def _build_default_scene_plan(topic, content):
@@ -638,7 +638,7 @@ def _generate_story_content_from_template(topic):
                 f"Wait, {clean_topic} is blowing up fast.",
                 summary,
                 *story_beats,
-                "Would you watch this? Follow for part two.",
+                "Would you watch this? Subscribe for more.",
             ]
         ),
         "scene_keywords": [
