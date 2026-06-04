@@ -33,26 +33,41 @@ if not hasattr(Image, "ANTIALIAS"):
 
 VOICEOVER_SPEED = float(os.environ.get("VOICEOVER_SPEED", "") or "1.12")
 DEFAULT_ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"
-ALLOW_STOCK_FALLBACK = os.environ.get("ALLOW_STOCK_FALLBACK", "false").strip().lower() in {
+ALLOW_STOCK_FALLBACK = os.environ.get("ALLOW_STOCK_FALLBACK", "").strip().lower() in {
     "1",
     "true",
     "yes",
 }
 HERA_API_KEY = os.environ.get("HERA_API_KEY", "").strip()
-HERA_RESOLUTION = os.environ.get("HERA_RESOLUTION", "720p").strip()
-HERA_FPS = os.environ.get("HERA_FPS", "30")
+HERA_RESOLUTION = os.environ.get("HERA_RESOLUTION", "").strip() or "720p"
+HERA_FPS = os.environ.get("HERA_FPS", "").strip() or "30"
 HERA_POLL_SECONDS = int(os.environ.get("HERA_POLL_SECONDS", "") or "10")
 HERA_MAX_POLLS = int(os.environ.get("HERA_MAX_POLLS", "") or "36")
-VEO_MODEL = os.environ.get("VEO_MODEL", "veo-3.1-generate-preview").strip()
-VEO_RESOLUTION = os.environ.get("VEO_RESOLUTION", "720p").strip()
+VEO_MODEL = os.environ.get("VEO_MODEL", "").strip() or "veo-3.1-generate-preview"
+VEO_RESOLUTION = os.environ.get("VEO_RESOLUTION", "").strip() or "720p"
 VEO_DURATION_SECONDS = int(os.environ.get("VEO_DURATION_SECONDS", "") or "8")
 VEO_POLL_SECONDS = int(os.environ.get("VEO_POLL_SECONDS", "") or "10")
 HIGGSFIELD_API_KEY = os.environ.get("HIGGSFIELD_API_KEY", "").strip()
-HIGGSFIELD_MODEL = os.environ.get("HIGGSFIELD_MODEL", "wan-2.5").strip()
-HIGGSFIELD_RESOLUTION = os.environ.get("HIGGSFIELD_RESOLUTION", "9:16").strip()
+HIGGSFIELD_MODEL = os.environ.get("HIGGSFIELD_MODEL", "").strip() or "wan-2.5"
+HIGGSFIELD_RESOLUTION = os.environ.get("HIGGSFIELD_RESOLUTION", "").strip() or "9:16"
 HIGGSFIELD_DURATION_SECONDS = int(os.environ.get("HIGGSFIELD_DURATION_SECONDS", "") or "8")
 HIGGSFIELD_POLL_SECONDS = int(os.environ.get("HIGGSFIELD_POLL_SECONDS", "") or "10")
 HIGGSFIELD_MAX_POLLS = int(os.environ.get("HIGGSFIELD_MAX_POLLS", "") or "36")
+
+
+def load_font(path, size):
+    import os
+    if os.name == "nt":
+        font_dir = os.environ.get("WINDIR", "C:\\Windows") + "\\Fonts"
+        is_bold = "Bold" in path or "bold" in path.lower()
+        font_name = "arialbd.ttf" if is_bold else "arial.ttf"
+        translated_path = os.path.join(font_dir, font_name)
+        if os.path.exists(translated_path):
+            path = translated_path
+    try:
+        return ImageFont.truetype(path, size)
+    except Exception:
+        return ImageFont.load_default()
 
 
 
@@ -105,13 +120,13 @@ def create_text_frame(
     draw = ImageDraw.Draw(img)
 
     try:
-        font_big = ImageFont.truetype(
+        font_big = load_font(
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size
         )
-        font_sub = ImageFont.truetype(
+        font_sub = load_font(
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 45
         )
-        font_brand = ImageFont.truetype(
+        font_brand = load_font(
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40
         )
     except Exception:
@@ -167,7 +182,7 @@ def create_subtitle_overlay(text, duration, size=(1080, 1920)):
     draw = ImageDraw.Draw(canvas)
 
     try:
-        font = ImageFont.truetype(
+        font = load_font(
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 66
         )
     except Exception:
@@ -220,7 +235,7 @@ def create_youtube_style_subtitle(text, duration, size=(1080, 1920)):
     clips = []
 
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 60)
+        font = load_font("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 60)
     except Exception:
         font = ImageFont.load_default()
 
@@ -811,8 +826,8 @@ def create_generated_scene_frame(keyword, visual_direction="", scene_index=0, si
     draw = ImageDraw.Draw(frame)
 
     try:
-        label_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
-        small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 30)
+        label_font = load_font("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+        small_font = load_font("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 30)
     except Exception:
         label_font = ImageFont.load_default()
         small_font = ImageFont.load_default()

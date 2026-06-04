@@ -30,10 +30,19 @@ def fetch_background_image(keyword):
 
 
 def load_font(path, size):
+    import os
+    if os.name == "nt":
+        font_dir = os.environ.get("WINDIR", "C:\\Windows") + "\\Fonts"
+        is_bold = "Bold" in path or "bold" in path.lower()
+        font_name = "arialbd.ttf" if is_bold else "arial.ttf"
+        translated_path = os.path.join(font_dir, font_name)
+        if os.path.exists(translated_path):
+            path = translated_path
     try:
         return ImageFont.truetype(path, size)
     except Exception:
         return ImageFont.load_default()
+
 
 
 def fit_text(draw, text, font_path, start_size, max_width, max_lines, min_size=26):
