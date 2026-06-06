@@ -2,9 +2,6 @@ name: AI Auto Poster
 
 on:
   schedule:
-    - cron: '30 3 * * *'    # 9:00 AM IST
-    - cron: '30 7 * * *'    # 1:00 PM IST
-    - cron: '30 13 * * *'   # 7:00 PM IST
   workflow_dispatch:
 
 jobs:
