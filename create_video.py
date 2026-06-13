@@ -32,7 +32,7 @@ if not hasattr(Image, "ANTIALIAS"):
 
 
 VOICEOVER_SPEED = float(os.environ.get("VOICEOVER_SPEED", "") or "1.12")
-DEFAULT_ELEVENLABS_VOICE_ID = "jqcCZkN6Knx8BJ5TBdYR"
+DEFAULT_ELEVENLABS_VOICE_ID = "WtA85syCrJwasGeHGH2p"
 ALLOW_STOCK_FALLBACK = os.environ.get("ALLOW_STOCK_FALLBACK", "").strip().lower() in {
     "1",
     "true",
