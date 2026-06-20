@@ -1083,13 +1083,15 @@ def download_file(url, path):
 
 
 def has_elevenlabs_access():
+    return bool(os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("ELEVENLABS_API_KEY_2"))
     return bool(os.environ.get("ELEVENLABS_API_KEY"))
 
 
 def create_elevenlabs_voiceover(script, output_path):
     voice_id = os.environ.get("ELEVENLABS_VOICE_ID", "").strip() or DEFAULT_ELEVENLABS_VOICE_ID
-    
+
     api_key_1 = os.environ.get("ELEVENLABS_API_KEY")
+    api_key_2 = os.environ.get("ELEVENLABS_API_KEY_2")
     keys_to_try = [k for k in [api_key_1, api_key_2] if k]
     
     last_err = None
