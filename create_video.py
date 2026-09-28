@@ -73,10 +73,13 @@ def load_font(path, size):
 
 def fetch_background_image(keyword):
     try:
+        api_key = os.environ.get("UNSPLASH_ACCESS_KEY")
+        if not api_key:
+            return Image.new("RGB", (1080, 1920), color=(30, 30, 50))
         url = (
             f"https://api.unsplash.com/photos/random"
             f"?query={keyword}&orientation=portrait"
-            f"&client_id={os.environ['UNSPLASH_ACCESS_KEY']}"
+            f"&client_id={api_key}"
         )
         resp = requests.get(url, timeout=10)
         data = resp.json()

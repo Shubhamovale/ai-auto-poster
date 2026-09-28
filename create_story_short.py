@@ -978,8 +978,8 @@ def create_story_short(content):
                 voiceover,
             )
         except Exception as exc:
-            print(f"Hera render failed: {exc}. Falling back to slide renderer...")
-            output_path = render_slide_story_short(
+            print(f"Hera render failed: {exc}. Falling back to Pexels renderer...")
+            output_path = render_pexels_story_short(
                 content,
                 scene_plan,
                 scene_durations,
@@ -996,8 +996,8 @@ def create_story_short(content):
             target_duration,
             voiceover,
         )
-    elif SHORTS_RENDER_MODE == "pexels":
-        output_path = render_pexels_story_short(
+    elif SHORTS_RENDER_MODE == "slide":
+        output_path = render_slide_story_short(
             content,
             scene_plan,
             scene_durations,
@@ -1006,7 +1006,7 @@ def create_story_short(content):
             voiceover,
         )
     else:
-        output_path = render_slide_story_short(
+        output_path = render_pexels_story_short(
             content,
             scene_plan,
             scene_durations,
