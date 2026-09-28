@@ -918,7 +918,7 @@ def create_story_short(content):
     
     if target_duration > voice_duration:
         scene_durations[-1] += target_duration - voice_duration
-    if SHORTS_RENDER_MODE == "veo":
+    if SHORTS_RENDER_MODE in {"veo", "gemini", "gemini_veo"}:
         try:
             output_path = render_veo_story_short(
                 content,
@@ -929,7 +929,7 @@ def create_story_short(content):
                 voiceover,
             )
         except Exception as exc:
-            print(f"Veo render failed: {exc}. Falling back to Pexels renderer...")
+            print(f"Gemini Veo render failed: {exc}. Falling back to Pexels renderer...")
             output_path = render_pexels_story_short(
                 content,
                 scene_plan,

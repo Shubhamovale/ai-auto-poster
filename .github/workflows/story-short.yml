@@ -30,7 +30,7 @@ jobs:
 
       - name: Generate story short
         env:
-          SHORTS_RENDER_MODE:      ${{ vars.SHORTS_RENDER_MODE }}
+          SHORTS_RENDER_MODE:      ${{ vars.SHORTS_RENDER_MODE || 'gemini' }}
           VEO_MODEL:               ${{ vars.VEO_MODEL }}
           VEO_RESOLUTION:          ${{ vars.VEO_RESOLUTION }}
           VEO_DURATION_SECONDS:    ${{ vars.VEO_DURATION_SECONDS }}
