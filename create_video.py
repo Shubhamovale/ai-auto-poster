@@ -1122,7 +1122,7 @@ def create_elevenlabs_voiceover(script, output_path):
             return output_path
         except requests.exceptions.HTTPError as e:
             last_err = e
-            if response.status_code in {401, 429} and idx < len(keys_to_try) - 1:
+            if response.status_code in {401, 402, 429} and idx < len(keys_to_try) - 1:
                 print(f"ElevenLabs Key {idx+1} failed ({response.status_code}). Trying next key...")
                 continue
             break
